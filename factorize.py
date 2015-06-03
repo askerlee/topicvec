@@ -202,7 +202,7 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
     print "Begin EM of weighted factorization by bigram freqs"
     Gsym  = sym(G)
 
-    alpha = 0.7
+    alpha = 0.5
     # X: low rank rep in the M step
     X = alpha * G
 
@@ -480,14 +480,14 @@ def main():
     #quantiles( F, quants, False )
     sqrtF = np.sqrt( F.T )
     Weight = sqrtF
-    idealCutPoint = getQuantileCut( Weight, 1.0/8 )
+    idealCutPoint = getQuantileCut( Weight, 0.0004 )
     totalElemCount = Weight.shape[0] * Weight.shape[1]
     
     if do_weight_cutoff:
         cutEntryCount = np.sum(Weight > idealCutPoint)
         Weight[ Weight > idealCutPoint ] = idealCutPoint
-        print "%d (%.2f%%) elements in Weight cut off at %.2f" %(cutEntryCount, 
-                                                        cutEntryCount * 100 / totalElemCount, idealCutPoint)
+        print "%d (%.3f%%) elements in Weight cut off at %.2f" %(cutEntryCount, 
+                                                        cutEntryCount * 100.0 / totalElemCount, idealCutPoint)
     
     del F
     

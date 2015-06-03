@@ -1,3 +1,4 @@
-perl gramcount.pl -i cleanwiki.txt -m1 --f1 top1grams-wiki.txt
-@rem perl gramcount.pl -i cleanwiki.txt -m2 --f1 top1grams-wiki.txt --f2 top2grams-wiki.txt
-perl gramcount.pl -i cleanwiki.txt -m2 --f1 top1grams-wiki.txt --nofilter -c --f2 top2grams-wiki.txt --top1 40000 -e absentwords.txt -w 4 --dyn
+set CORPUS=D:\omer\cleanwiki.txt.clean
+set SUFFIX=wiki-clean
+perl gramcount.pl -i %CORPUS% -m1 --f1 top1grams-%SUFFIX%.txt -c --nofilter
+perl gramcount.pl -i %CORPUS% -m2 --f1 top1grams-%SUFFIX%.txt --nofilter -c --f2 top2grams-%SUFFIX%.txt --top1 28000 -e absentwords.txt -w 5 --dyn

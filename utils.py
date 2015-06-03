@@ -12,7 +12,7 @@ class Timer(object):
     def __init__(self, name=None):
         self.name = name
         self.tstart = time.time()
-        
+
     def __del__(self):
         if self.name:
             print '%s elapsed: %.2f' % (self.name, time.time() - self.tstart)
@@ -42,7 +42,7 @@ def matSizes( norm, Ms, Weight=None ):
     sizes = []
     for M in Ms:
         sizes.append( norm(M, Weight) )
-    
+
     return sizes
 
 def sym(M):
@@ -61,16 +61,18 @@ def getQuantileCut(A, fraction):
     maxElem = A[0,0]
     cutPoint = maxElem
     idealCutPoint = cutPoint
-    
+    idealFound = False
+
     while cutPoint >= 10:
         aboveElemCount = np.sum( A >= cutPoint )
-        print "Cut point %.0f: %d" %(cutPoint, aboveElemCount)
-        if aboveElemCount >= totalElemCount * fraction:
+        print "Cut point %.0f: %d/%.3f%%" %( cutPoint, aboveElemCount, aboveElemCount * 100.0 / totalElemCount )
+        if not idealFound and aboveElemCount >= totalElemCount * fraction:
             idealCutPoint = cutPoint
-        cutPoint /= 3.0
-        
+            idealFound = True
+        cutPoint /= 2.0
+
     return idealCutPoint
-    
+
 # find the principal eigenvalue/eigenvector: e1 & v1.
 # if e1 < 0, then the left principal singular vector is -v1, and the right is v1.
 # much faster than numpy.linalg.eig / scipy.linalg.eigh
@@ -104,14 +106,14 @@ def power_iter(M):
 # each column of vs is an eigenvector
 def lowrank_fact(VV, N0):
     timer1 = Timer( "lowrank_fact()" )
-        
+
     es, vs = np.linalg.eigh(VV)
     es = es[-N0:]
     vs = vs[ :, -N0: ]
     E_sqrt = np.diag( np.sqrt(es) )
     V = vs.dot(E_sqrt.T)
     VV = V.dot(V.T)
-        
+
     return V, VV, vs,es
 
 def save_embeddings( filename, vocab, V, matrixName ):
@@ -139,7 +141,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
     V = []
     word2dim = {}
     vocab = []
-    
+
     try:
         header = FMAT.readline()
         lineno = 1
@@ -155,13 +157,14 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
         else:
             maxWordCount = vocab_size
 
-        print "%d extra words" %(len(extraWords))    
+        print "%d extra words" %(len(extraWords))
 
-        # maxWordCount + len(extraWords) is the maximum num of words. 
+        # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
         V = np.zeros( (maxWordCount + len(extraWords), N), dtype=precision )
         wid = 0
         orig_wid = 0
+        
         for line in FMAT:
             lineno += 1
             line = line.strip()
@@ -170,16 +173,17 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
                 if orig_wid != vocab_size:
                     raise ValueError( lineno, "%d words declared in header, but %d read" %(vocab_size, len(V)) )
                 break
-            
-            orig_wid += 1    
+
+            orig_wid += 1
             fields = line.split(' ')
+            fields = filter( lambda x: x, fields )
             w = fields[0]
-            
+
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
             if orig_wid >= maxWordCount and w not in extraWords:
                 continue
-                
+
             V[wid] = np.array( [ float(x) for x in fields[1:] ], dtype=precision )
             word2dim[w] = wid
             vocab.append(w)
@@ -194,12 +198,12 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
             print "Unknown line %d:\n%s" %( e.args[0], e.args[1] )
         else:
             exc_type, exc_obj, tb = sys.exc_info()
-            print "Source line %d: %s" %(tb.tb_lineno, e)
+            print "Source line %d - %s on File line %d:\n%s" %( tb.tb_lineno, e, lineno, line )
         exit(2)
-    
+
     FMAT.close()
     print "%d embeddings read, %d kept" %(orig_wid, wid)
-    
+
     if wid < len(V):
         V = V[0:wid]
     return V, vocab, word2dim
@@ -211,23 +215,23 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
     vocab = []
     #origWord2dim = {}
     #origVocab = []
-    
+
     with open(filename, "rb") as fin:
         header = fin.readline()
         vocab_size, N = map(int, header.split())
-        
+
         if maxWordCount > 0:
             maxWordCount = min(maxWordCount, vocab_size)
         else:
             maxWordCount = vocab_size
 
-        print "%d extra words" %(len(extraWords))    
-        # maxWordCount + len(extraWords) is the maximum num of words. 
+        print "%d extra words" %(len(extraWords))
+        # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
         V = np.zeros( (maxWordCount + len(extraWords), N), dtype=precision )
-            
+
         full_binvec_len = np.dtype(precision).itemsize * N
-        
+
         #pdb.set_trace()
         orig_wid = 0
         wid = 0
@@ -251,17 +255,17 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
 
             #origWord2dim[word] = orig_wid
             #origVocab.append(word)
-            
-            orig_wid += 1    
+
+            orig_wid += 1
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
             if orig_wid >= vocab_size:
                 break
-                
+
             if orig_wid >= maxWordCount and word not in extraWords:
                 fin.read(full_binvec_len)
                 continue
-                
+
             word2dim[word] = wid
             vocab.append(word)
             V[wid] = np.fromstring( fin.read(full_binvec_len), dtype=precision )
@@ -270,12 +274,12 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
                 del extraWords[word]
             if orig_wid >= maxWordCount and len(extraWords) == 0:
                 break
-                
+
     if wid < len(V):
         V = V[0:wid]
     print "%d embeddings read, %d embeddings kept" %(orig_wid, wid)
     return V, vocab, word2dim
-                        
+
 def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
     print "Loading bigram file '%s':" %bigram_filename
     BIGRAM = open(bigram_filename)
@@ -286,38 +290,38 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
     stage = 1
     do_smoothing=True
     timer1 = Timer( "loadBigramFile()" )
-    
+
     try:
         header = BIGRAM.readline()
         lineno += 1
         match = re.match( r"# (\d+) words, \d+ occurrences", header )
         if not match:
             raise ValueError(lineno, header)
-    
+
         wholeVocabSize = int(match.group(1))
         print "Totally %d words"  %wholeVocabSize
-        # If topWordNum < 0, read all focus words        
+        # If topWordNum < 0, read all focus words
         if topWordNum < 0:
             topWordNum = wholeVocabSize
-    
+
         # skip params
         header = BIGRAM.readline()
         header = BIGRAM.readline()
         lineno += 2
-    
+
         match = re.match( r"# (\d+) bigram occurrences", header)
         if not match:
             raise ValueError(lineno, header)
-    
+
         header = BIGRAM.readline()
         lineno += 1
-    
+
         if header[0:6] != "Words:":
             raise ValueError(lineno, header)
-    
+
         # vector log_u, unigram log-probs
         log_u = []
-    
+
         i = 0
         wc = 0
         # Read the focus word list, build the word2dim mapping
@@ -326,11 +330,11 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
             header = BIGRAM.readline()
             lineno += 1
             header = header.rstrip()
-    
+
             # "Words" field ends
             if not header:
                 break
-    
+
             words = header.split("\t")
             for word in words:
                 w, freq, log_ui = word.split(",")
@@ -340,57 +344,57 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
                     vocab.append(w)
                     i += 1
                 wc += 1
-    
+
         # Usually these two should match, unless the bigram file is corrupted
         if wc != wholeVocabSize:
             raise ValueError( "%d words declared in header, but %d seen" %(wholeVocabSize, wc) )
-    
+
         vocab_size = len(vocab)
         print "%d words seen, top %d & %d extra to keep. %d kept" %( wholeVocabSize, topWordNum, len(extraWords), vocab_size )
-    
+
         log_u = np.array(log_u)
         u = np.exp(log_u)
         # renormalize unigram probs
         if topWordNum < wholeVocabSize:
             u = u / np.sum(u)
             log_u = np.log(u)
-    
+
         k_u = kappa * u
         # original B, without smoothing
         #B = []
         G = np.zeros( (vocab_size, vocab_size), dtype=np.float32 )
         F = np.zeros( (vocab_size, vocab_size), dtype=np.float32 )
-    
+
         header = BIGRAM.readline()
         lineno += 1
-    
+
         if header[0:8] != "Bigrams:":
             raise ValueError(lineno, header)
-    
+
         print "Read bigrams:"
         stage = 2
-        
+
         line = BIGRAM.readline()
         lineno += 1
         wid = 0
-        
+
         while True:
             line = line.strip()
             # end of file
             if not line:
                 break
-    
+
             # We have read the bigrams of all the wanted focus words
             if wid == vocab_size:
                 # if some words in extraWords are not read, there is bug
                 break
-    
+
             orig_wid, w, neighborCount, freq, cutoffFreq = line.split(",")
             orig_wid = int(orig_wid)
-    
+
             if orig_wid % 500 == 0:
                 print "\r%d\r" %orig_wid,
-    
+
             if orig_wid <= topWordNum or w in extraWords:
                 readNeighbors = True
                 # remove it from the extra list, as a double-check measure
@@ -399,32 +403,32 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
                     del extraWords[w]
             else:
                 readNeighbors = False
-                   
+
             # x_{.j}
             x_j = np.zeros(vocab_size, dtype=np.float32)
-    
+
             while True:
                 line = BIGRAM.readline()
                 lineno += 1
-    
+
                 # Empty line. Should be end of file
                 if not line:
                     break
-    
+
                 # A comment. Just in case of future extension
                 # Currently only the last line in the file is a comment
                 if line[0] == '#':
                     continue
-                    
+
                 # beginning of the next word. Continue at the outer loop
                 # Neighbor lines always start with '\t'
                 if line[0] != '\t':
                     break
-                
+
                 # if the current focus word is not wanted, skip these lines
                 if not readNeighbors:
                     continue
-                    
+
                 line = line.strip()
                 neighbors = line.split("\t")
                 for neighbor in neighbors:
@@ -433,16 +437,16 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
                     if w2 in word2dim:
                         i = word2dim[w2]
                         x_j[i] = int(freq2)
-    
+
             # B stores original probs
             #B.append( x_j / np.sum(x_j) )
-    
+
             # only push to F & G when the focus word is wanted
             if readNeighbors:
                 # append a copy of x_j by * 1
                 # otherwise only append a pointer. The contents may be changed accidentally elsewhere
                 # the freqs are transformed and used as weights
-        
+
                 # smoothing using ( total freq of w )^0.7
                 if do_smoothing:
                     x_j_norm1 = norm1(x_j)
@@ -451,18 +455,18 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
                     #x_j_norm2 = norm1(x_j)
                     #smooth_norm = norm1(utrans)
                     #if wid % 50 == 0:
-                    #    print "%d,%d: smoothing %.5f/%.5f. %d -> %d" %( orig_wid, wid+1, smooth_norm, smooth_norm/x_j_norm1, 
+                    #    print "%d,%d: smoothing %.5f/%.5f. %d -> %d" %( orig_wid, wid+1, smooth_norm, smooth_norm/x_j_norm1,
                     #                                                        x_j_norm1, x_j_norm2 )
-                        
+
                 F[wid] = x_j
-        
+
                 # normalization
                 b_j = x_j / np.sum(x_j)
-                
+
                 logb_j = np.log(b_j)
                 G[wid] = logb_j - log_u
                 wid += 1
-    
+
     except ValueError, e:
         if len( e.args ) == 2:
             print "Unknown line %d:\n%s" %( e.args[0], e.args[1] )
@@ -474,10 +478,10 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
             else:
                 print line
         exit(0)
-    
+
     print
     BIGRAM.close()
-    
+
     return vocab, word2dim, G, F, u
 
 def loadUnigramFile(filename):
@@ -492,7 +496,7 @@ def loadUnigramFile(filename):
                              # id, freq, log prob
         vocab_dict[ fields[0] ] = (i, fields[1], fields[2])
         i += 1
-    
+
     return vocab_dict
 
 def loadExtraWordFile(filename):
@@ -502,8 +506,8 @@ def loadExtraWordFile(filename):
             w, wid = line.strip().split('\t')
             extraWords[w] = 1
 
-    return extraWords   
-    
+    return extraWords
+
 # borrowed from Omer Levy's code
 def loadSimTestset(path):
     testset = []
@@ -517,10 +521,17 @@ def loadSimTestset(path):
 def loadAnaTestset(path):
     testset = []
     print "Read analogy testset " + path
+    possessive = 0
     with open(path) as f:
         for line in f:
+            # skip possessive forms
+            if line.find("'") >= 0:
+                possessive += 1
+                continue
             a, a2, b, b2 = line.strip().lower().split()
             testset.append( [ a, a2, b, b2 ] )
+    
+    print "%d possessive pairs skipped" %possessive
     return testset
 
 def loadTestsets(loader, testsetDir, testsetNames):
@@ -528,11 +539,11 @@ def loadTestsets(loader, testsetDir, testsetNames):
     testsetDir = testsetDir.replace("\\", "/")
     if testsetDir[-1] != '/':
         testsetDir += '/'
-    
+
     if not os.path.isdir(testsetDir):
         print "ERR: Test set dir does not exist or is not a dir:\n" + testsetDir
         sys.exit(2)
-    
+
     testsets = []
     if len(testsetNames) == 0:
         testsetNames = glob.glob( testsetDir + '*.txt' )
@@ -540,13 +551,13 @@ def loadTestsets(loader, testsetDir, testsetNames):
             print "No testset ended with '.txt' is found in " + testsetDir
             sys.exit(2)
         testsetNames = map( lambda x: os.path.basename(x)[:-4], testsetNames )
-            
+
     for testsetName in testsetNames:
         testset = loader( testsetDir + testsetName + ".txt" )
         testsets.append(testset)
-    
+
     return testsets
-    
+
 # "model" in methods below has to support two methods:
 # model[w]: return the embedding of w
 # model.similarity(x, y): return the cosine similarity between the embeddings of x and y
@@ -570,20 +581,21 @@ def predict_ana( model, a, a2, b, realb2 ):
     ib = model.word2dim[b]
     ib2 = model.word2dim[realb2]
     realaddsim = addsims[ib2]
-    
-    """
-    mulsims = b2a2 * b2b / ( b2a + 0.01 )            
-    baa2 = model[b] - model[a] + model[a2]
+
+    mulsims = ( b2a2 + 1 ) * ( b2b + 1 ) / ( b2a + 1.001 )
+    mulsims[questWordIndices] = -10000
+    imul = np.nanargmax(mulsims)
+    b2mul  = model.vocab[imul]
+
+    return b2add, b2mul
+
+''' baa2 = model[b] - model[a] + model[a2]
     baa2 = baa2/normF(baa2)
     sims2 = model.V.dot(baa2)
     dists1 = np.abs( model.V - baa2 ).dot( np.ones( model.V.shape[1] ) )
 
-    mulsims[questWordIndices] = -10000
     sims2[questWordIndices] = -10000
     dists1[questWordIndices] = 10000
-
-    imul = np.nanargmax(mulsims)
-    b2mul  = model.vocab[imul]
 
     i2 = np.nanargmax(sims2)
     b22 = model.vocab[i2]
@@ -592,17 +604,17 @@ def predict_ana( model, a, a2, b, realb2 ):
 
     realsim2 = sims2[ib2]
     realdist1 = dists1[ib2]
-    
+
     # F-norm (L2)
     topIDs2 = sims2.argsort()[-5:][::-1]
     topwords2 = [ model.vocab[i] for i in topIDs2 ]
     topsims2 = sims2[topIDs2]
-    
+
     # Manhattan distance (L1)
     topIDs1 = sims1.argsort()[-5:][::-1]
     topwords1 = [ model.vocab[i] for i in topIDs1 ]
     topsims1 = sims1[topIDs1]
-    
+
     if b22 != realb2:
         print "%s,%s\t%s,[%s]" %(a,a2,b,realb2)
         print "%s,%f\t%s\t%s" %(b21,realsim1, str(topsims1), str(topwords1))
@@ -610,9 +622,7 @@ def predict_ana( model, a, a2, b, realb2 ):
         print
         #pdb.set_trace()
     return b2add, b2mul, b21, b22
-    """
-    
-    return b2add
+    '''
 
 # vocab_dict is a vocabulary dict, usually bigger than model.vocab, loaded from a unigram file
 # its purpose is to find absent words in the model
@@ -626,22 +636,22 @@ def evaluate_sim(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
     cutVocabWords = {}
     # a set of spearman coeffs, in the same order as in testsets
     spearmanCoeff = []
-    
+
     for i,testset in enumerate(testsets):
         modelResults = []
         groundtruth = []
-        
+
         for x, y, sim in testset:
             if vocab_dict and x in vocab_dict:
                 xid = vocab_dict[x][0]
                 if cutPoint > 0 and xid > cutPoint:
                     cutVocabWords[x] = 1
-                    
-            if vocab_dict and y in vocab_dict:                    
+
+            if vocab_dict and y in vocab_dict:
                 yid = vocab_dict[y][0]
                 if cutPoint > 0 and yid > cutPoint:
                     cutVocabWords[y] = 1
-            
+
             if x not in model:
                 if getAbsentWords and x in vocab_dict:
                     absentModelID2Word[xid] = x
@@ -660,7 +670,7 @@ def evaluate_sim(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
         spearmanCoeff.append( spearmanr(modelResults, groundtruth)[0] )
         print ", %.5f" %spearmanCoeff[-1]
 
-    # return hashes directly, for ease of merge    
+    # return hashes directly, for ease of merge
     return spearmanCoeff, absentModelID2Word, absentVocabWords, cutVocabWords
 
 # vocab_dict is a vocabulary dict, usually bigger than model.vocab, loaded from a unigram file
@@ -675,65 +685,67 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
     # a set of scores, in the same order as in testsets
     # each is a tuple (add_score, mul_score)
     anaScores = []
-    
+
     #pdb.set_trace()
-    
+
     for i,testset in enumerate(testsets):
         modelResults = []
         groundtruth = []
 
         correct_add = 0.0
-#        correct_mul = 0.0
-#        correct_L1 = 0.0
-#        correct_L2 = 0.0
+        correct_mul = 0.0
         validPairNum = 0
         currentScore = 0.0
-        
+
         for j,analogy in enumerate(testset):
-                
+
             allWordsPresent = True
             watchWhenWrong = False
-            
+
             for x in analogy:
                 if vocab_dict and x in vocab_dict:
                     xid = vocab_dict[x][0]
                     if cutPoint > 0 and xid > cutPoint:
                         cutVocabWords[x] = 1
                         watchWhenWrong = True
-                        
+
                 if x not in model:
                     if vocab_dict and x in vocab_dict:
                         absentModelID2Word[ vocab_dict[x][0] ] = x
                     else:
                         absentVocabWords[x] = 1
                     allWordsPresent = False
-                    
+
             if allWordsPresent:
                 a, a2, b, b2 = analogy
-                b2_add = predict_ana( model, a, a2, b, b2 )
+                b2add, b2mul = predict_ana( model, a, a2, b, b2 )
                 validPairNum += 1
-                if b2_add == b2:
+                if b2add == b2:
                     correct_add += 1
                 elif watchWhenWrong:
                     print "%s~%s = %s~%s,%.3f (%s,%3f)" %( a, a2, b, b2, model.similarity(b,b2), b2_add, model.similarity(b,b2_add) )
-                    
+
+                if b2mul == b2:
+                    correct_mul += 1
+
                 """if b2_mul == b2:
                     correct_mul += 1
-                if b2_L1 == b2:    
-                    correct_L1 += 1    
-                if b2_L2 == b2:    
+                if b2_L1 == b2:
+                    correct_L1 += 1
+                if b2_L2 == b2:
                     correct_L2 += 1
                 currentScores = np.array([ correct_add, correct_mul, correct_L1, correct_L2 ]) / validPairNum
-                """    
+                """
 
-                currentScore = correct_add / validPairNum
-                
+                currentScores = np.array( [ correct_add, correct_mul ] ) / validPairNum
+
             if j % 500 == 499:
-                print "\r%i/%i/%i: %.5f\r" %( j + 1, validPairNum, len(testset), currentScore ),
-                
+                print "\r%i/%i/%i: Add %.5f, Mul %.5f\r" %( j + 1, validPairNum, len(testset), 
+                                                            currentScores[0], currentScores[1] ),
+
         print "\n%s: %d analogies, %d valid" %( testsetNames[i], len(testset), validPairNum ),
-        anaScores.append(currentScore)
-        print ". AddSim Score: %.5f" %currentScore
+        anaScores.append(currentScores)
+        print ". Add Score: %.5f, Mul Score: %.5f" %( currentScores[0], currentScores[1] )
 
     return anaScores, absentModelID2Word, absentVocabWords, cutVocabWords
 
@@ -747,7 +759,7 @@ def bench(func, N, topEigenNum=0):
     diff = toc - tic
     print "Elapsed time is %.3f" %diff
     return diff
-        
+
 class vecModel:
     def __init__(self, V, vocab, word2dim, vecNormalize=True):
         self.Vorig = V
@@ -757,10 +769,10 @@ class vecModel:
         self.vocab = vocab
         self.iterIndex = 0
         self.cosTable = None
-        
+
     def __contains__(self, w):
         return w in self.word2dim
-        
+
     def __getitem__(self, w):
         if w not in self:
             return None
@@ -775,47 +787,46 @@ class vecModel:
             return None
         else:
             return self.Vorig[ self.word2dim[w] ]
-    
+
     def precompute_cosine(self):
         print "Precompute cosine matrix...",
         self.cosTable = np.dot( self.V, self.V.T )
         print "Done."
-        
+
     def similarity(self, x, y):
         if x not in self or y not in self:
             return 0
-        
+
         if self.vecNormalize:
             if self.cosTable is not None:
                 ix = self.word2dim[x]
                 iy = self.word2dim[y]
                 return self.cosTable[ix,iy]
             return np.dot( self[x], self[y] )
-        
-        # when vectors are not normalized, return the raw dot product                        
+
+        # when vectors are not normalized, return the raw dot product
         vx = self[x]
         vy = self[y]
         # vector too short. the similarity doesn't make sense
         if normF(vx) <= 1e-6 or normF(vy) <= 1e-6:
             return 0
-        
+
         return np.dot( self[x], self[y] )
 
     def sim_row(self, x):
         if x not in self:
             return 0
-        
+
         if self.vecNormalize:
             if self.cosTable is None:
                 self.precompute_cosine()
             ix = self.word2dim[x]
             return self.cosTable[ix]
-                    
+
         vx = self[x]
         # vector too short. the dot product similarity doesn't make sense
         if normF(vx) <= 1e-6:
             return np.zeros( len(self.vocab) )
-        
+
         return self.V.dot(vx)
 
-            

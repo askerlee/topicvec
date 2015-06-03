@@ -72,7 +72,7 @@ our %unigram2freq;
 our %bigram2freq;
 our %interestWord2ID;
 our $interestWordsOn = 0;
-our $allBigramOccurrences = 0;
+our $allBigramOccur = 0;
 
 if( $options{mode} == 1 ){
 	$processor = \&countUnigramFreqInWindow;
@@ -130,10 +130,10 @@ if( $options{c} ){
     }
 }
 
-our $totalWordCount = 0;
+our $totalWordOccur = 0;
 our $totalInterestWordCount = 0;
 our $totalSentenceCount = 0;
-our $totalNonEngWordCount = 0;
+our $totalNonEngWordOccur = 0;
 our $lineCount = 0;
 our $fileCount = 0;
 # '0' is no limit
@@ -183,7 +183,7 @@ sub processFile
     		# old Perl code
 			if( ! $options{nofilter} ){
                 if( $sentenceCount % 500 == 0 ){
-                    printf( "\r%d, %d, %.1fM\r", %., $sentenceCount, $filesize / (1024*1024) );
+                    printf( "\r%d, %d, %.1fM\r", $., $sentenceCount, $filesize / (1024*1024) );
                 }
                 #$sentence =~ s/\'//g;
 
@@ -208,8 +208,8 @@ sub processFile
 			my $nonEngWc = $wc - scalar @words;
 			next if @words < $options{minwords_sentence};
 
-			$totalWordCount += @words;
-			$totalNonEngWordCount += $nonEngWc;
+			$totalWordOccur += @words;
+			$totalNonEngWordOccur += $nonEngWc;
 
 			&$processor(\@words);
 		}
@@ -248,7 +248,7 @@ else{
 
 print "$fileCount files, $lineCount lines, $totalSentenceCount sentences, ";
 if( ! $options{c} ){
-    print "$totalWordCount words occur, $totalNonEngWordCount non Eng, $totalInterestWordCount interest words occur\n";
+    print "$totalWordOccur words occur, $totalNonEngWordOccur non Eng, $totalInterestWordCount interest words occur\n";
 }
 else{
     printStats_();
@@ -347,7 +347,7 @@ sub countBigramFreqInWindow
 			next if !exists $interestWord2ID{$w2};
 			$bigram2freq{$w}{$w2}++;
     		$unigram2freq{$w}++;
-    		$allBigramOccurrences++;
+    		$allBigramOccur++;
 		}
 	}
 }
@@ -412,7 +412,7 @@ sub outputTopBigrams
 	    # the unigram probability is defined as the fraction of bigrams
 	    # whose second word is $w, in all bigrams
 	    print $OUTF join( ",", $w, $unigram2freq{$w},
-	                        trunc( 3, log( $unigram2freq{$w} / $allBigramOccurrences ) ) );
+	                        trunc( 3, log( $unigram2freq{$w} / $allBigramOccur ) ) );
 
 	    if( $i < @words2 - 1 ){
 	        if( $i % 10 == 9 ){
@@ -478,8 +478,8 @@ sub outputTopBigrams
     print "\n";
 	print "$bigramCount bigrams from ", $wordCount, " words are saved into '$topbigramFilename'\n";
 
-	if( $allKeptBigramOccurrences > $allBigramOccurrences ){
-	    die "BUG: kept bigram occurs $allKeptBigramOccurrences > all bigram occurs $allBigramOccurrences\n";
+	if( $allKeptBigramOccurrences > $allBigramOccur ){
+	    die "BUG: kept bigram occurs $allKeptBigramOccurrences > all bigram occurs $allBigramOccur\n";
 	}
 }
 
@@ -502,7 +502,7 @@ sub writeParams
 	print $OUTF "# $wordcount words, $totalInterestWordCount occurrences\n";
 	print $OUTF '# ', join( ', ', map { "$_=" . $options{$_} } @varNames ), "\n";
 	if( $options{mode} == 2 ){
-	    print $OUTF "# $allBigramOccurrences bigram occurrences\n";
+	    print $OUTF "# $allBigramOccur bigram occurrences\n";
 	}
 }
 
@@ -615,9 +615,9 @@ vector<I2I> bigram2freq;
 
 bool interestWordsOn = false;
 double totalInterestWordCount = 0;
-double allBigramOccurrences = 0;
-int totalWordCount = 0;
-int totalNonEngWordCount = 0;
+double allBigramOccur = 0;
+long long totalWordOccur = 0;
+long long totalNonEngWordOccur = 0;
 
 struct options{
     int mode;
@@ -634,6 +634,7 @@ struct options{
     double min1gramprob;
     int min2gramfreq;
     double min2gramprob;
+    int checkNonEng;
 } opt;
 
 default_random_engine randGen;
@@ -731,6 +732,8 @@ void passParams_( int mode, char* input, char* dir, char* f1, int top1,
     if( opt.dyn ){
         pUniform = new uniform_int_distribution<int>( 1, opt.window );
     }
+    
+    opt.checkNonEng = 0;
 }
 
 void passInterestWords_( char** pInterestWords )
@@ -830,7 +833,7 @@ void countBigramFreqInWindow_(vector<string>& words, int window)
 			    continue;
     		bigram2freq[wid][w2id]++;
 			unigram2freq[wid]++;
-    		allBigramOccurrences++;
+    		allBigramOccur++;
 		}
 	}
 }
@@ -840,20 +843,25 @@ void processSentence_(char* sentence)
     vector<string> words;
     char* w;
     int wc = 0;
-    
+
     w = strtok(sentence, " ");
     while(w){
-        unsigned char* pchar = (unsigned char*)w;
         bool isLegalWord = true;
-        while(*pchar){
-    		// remove words containing non-English, e.g. French, Greek..., letters
-    		// include processive forms like "people's" as unigrams
-            if( ! isWordChar[*pchar] ){
-                isLegalWord = false;
-                break;
+        
+        // default is not checking
+        if( opt.checkNonEng ){
+            unsigned char* pchar = (unsigned char*)w;
+            while(*pchar){
+        		// remove words containing non-English, e.g. French, Greek..., letters
+        		// include processive forms like "people's" as unigrams
+                if( ! isWordChar[*pchar] ){
+                    isLegalWord = false;
+                    break;
+                }
+                pchar++;
             }
-            pchar++;
         }
+        
         if(isLegalWord){
             words.push_back(w);
         }
@@ -872,14 +880,14 @@ void processSentence_(char* sentence)
     else
         countBigramFreqInWindow_( words, opt.window );
         
-    totalWordCount += words.size();
-    totalNonEngWordCount += nonEngWc;
+    totalWordOccur += words.size();
+    totalNonEngWordOccur += nonEngWc;
 }
 
 void printStats_()
 {
-    printf( "%d words occur, %d non Eng, %d interest words occur\n",
-                totalWordCount, totalNonEngWordCount, (int)totalInterestWordCount );
+    printf( "%I64d words occur, %I64d discarded, %I64d interest words occur\n",
+                totalWordOccur, totalNonEngWordOccur, (long long)totalInterestWordCount );
 }
 
 #define PPARAMS(x) fprintf( OUTF, ", %s=%s", #x, opt.x.c_str() );
@@ -909,7 +917,7 @@ void writeParams_(FILE* OUTF, int wordcount)
     fprintf( OUTF, "\n" );
     
     if( opt.mode == 2 )
-        fprintf( OUTF, "# %I64d bigram occurrences\n", (long long)allBigramOccurrences );
+        fprintf( OUTF, "# %I64d bigram occurrences\n", (long long)allBigramOccur );
 }
 
 void outputTopUnigrams_(const char* top1gramFilename)
@@ -1001,7 +1009,7 @@ void outputTopBigrams_(const char* topbigramFilename)
 	    string& w = ID2word[wid];
 	    // the unigram probability is defined as the fraction of bigrams
 	    // whose second word is w, in all bigrams
-	    fprintf( OUTF, "%s,%d,%.3f", w.c_str(), unigram2freq[wid], log( unigram2freq[wid] / allBigramOccurrences ) );
+	    fprintf( OUTF, "%s,%d,%.3f", w.c_str(), unigram2freq[wid], log( unigram2freq[wid] / allBigramOccur ) );
 
 	    if( i < wordCount ){
 	        if( i % 10 == 0 )
@@ -1074,13 +1082,13 @@ void outputTopBigrams_(const char* topbigramFilename)
 		    printf("\r%d\r", wc);
 		}
 	}
-	// for integrity check. allKeptBigramOccurrences should <= allBigramOccurrences
+	// for integrity check. allKeptBigramOccurrences should <= allBigramOccur
 	fprintf( OUTF, "# Total kept bigram occurrences: %I64d\n", (long long)allKeptBigramOccurrences );
 
 	printf( "\n%d bigrams of %d focus words are saved into '%s'\n", bigramCount, wordCount, topbigramFilename );
 
-    if( allKeptBigramOccurrences > allBigramOccurrences ){
+    if( allKeptBigramOccurrences > allBigramOccur ){
         raise(5);
-	    // "BUG: kept bigram occurs allKeptBigramOccurrences > all bigram occurs allBigramOccurrences\n";
+	    // "BUG: kept bigram occurs allKeptBigramOccurrences > all bigram occurs allBigramOccur\n";
 	}
 }

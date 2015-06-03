@@ -7,17 +7,17 @@ import numpy as np
 #import pdb
 
 getAbsentWords = False
-modelFiles = [ "c:/corpus/GoogleNews-vectors-negative300.bin", "c:/corpus/glove.6B.300d.txt", 
-                "26462-500-EM.vec" ]
+modelFiles = [ "d:/corpus/GoogleNews-vectors-negative300.bin", "d:/corpus/glove.6B.300d.txt", 
+                "29291-500-EM.vec", "d:/corpus/wordvecs/vec_520_forest", "d:/omer/glove/wiki-glove.vec2.txt" ]
                 
-isModelsBinary = [ True, False, False ]
+isModelsBinary = [ True, False, False, False, False ]
 modelID = 3
 
 # default is current directory
-simTestsetDir = "c:/Dropbox/doc2vec/omer2/testsets/ws/"
+simTestsetDir = "d:/Dropbox/doc2vec/omer2/testsets/ws/"
 # if set to [], run all testsets
 simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
-anaTestsetDir = "c:/Dropbox/doc2vec/omer2/testsets/analogy/"
+anaTestsetDir = "d:/Dropbox/doc2vec/omer2/testsets/analogy/"
 # if set to [], run all testsets
 anaTestsetNames = [ "google", "msr" ]
 
