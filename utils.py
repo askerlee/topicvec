@@ -181,6 +181,9 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
 
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
+                
+            if orig_wid >= maxWordCount and len(extraWords) == 0:
+                break
             if orig_wid >= maxWordCount and w not in extraWords:
                 continue
 
@@ -190,8 +193,6 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
             wid += 1
             if w in extraWords:
                 del extraWords[w]
-            if orig_wid >= maxWordCount and len(extraWords) == 0:
-                break
 
     except ValueError, e:
         if len( e.args ) == 2:
@@ -206,6 +207,8 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
 
     if wid < len(V):
         V = V[0:wid]
+    
+    # V: embeddings, vocab: array of words, word2dim: dict of word to index in V        
     return V, vocab, word2dim
 
 # borrowed from gensim.models.word2vec
@@ -225,7 +228,7 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
         else:
             maxWordCount = vocab_size
 
-        print "%d extra words" %(len(extraWords))
+        print "max %d words, %d extra words" %( maxWordCount, len(extraWords) )
         # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
         V = np.zeros( (maxWordCount + len(extraWords), N), dtype=precision )
@@ -262,6 +265,9 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
             if orig_wid >= vocab_size:
                 break
 
+            if orig_wid >= maxWordCount and len(extraWords) == 0:
+                break
+
             if orig_wid >= maxWordCount and word not in extraWords:
                 fin.read(full_binvec_len)
                 continue
@@ -272,12 +278,12 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
             wid += 1
             if word in extraWords:
                 del extraWords[word]
-            if orig_wid >= maxWordCount and len(extraWords) == 0:
-                break
 
     if wid < len(V):
         V = V[0:wid]
     print "%d embeddings read, %d embeddings kept" %(orig_wid, wid)
+    
+    # V: embeddings, vocab: array of words, word2dim: dict of word to index in V        
     return V, vocab, word2dim
 
 def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
@@ -494,7 +500,7 @@ def loadUnigramFile(filename):
             continue
         fields = line.split("\t")
                              # id, freq, log prob
-        vocab_dict[ fields[0] ] = (i, fields[1], fields[2])
+        vocab_dict[ fields[0] ] = ( i, int(fields[1]), np.exp(float(fields[2])) )
         i += 1
 
     return vocab_dict

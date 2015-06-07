@@ -7,10 +7,10 @@ import numpy as np
 #import pdb
 
 getAbsentWords = False
-modelFiles = [ "d:/corpus/GoogleNews-vectors-negative300.bin", "d:/corpus/glove.6B.300d.txt", 
-                "29291-500-EM.vec", "d:/corpus/wordvecs/vec_520_forest", "d:/omer/glove/wiki-glove.vec2.txt" ]
+modelFiles = [ "d:/corpus/GoogleNews-vectors-negative300.bin", "29291-500-EM.vec", 
+                "d:/corpus/wordvecs/vec_520_forest", "d:/omer/glove/wiki-glove.vec2.txt" ]
                 
-isModelsBinary = [ True, False, False, False, False ]
+isModelsBinary = [ True, False, False, False ]
 modelID = 3
 
 # default is current directory
@@ -109,6 +109,28 @@ if isModelBinary:
     V, vocab2, word2dim = load_embeddings_bin(modelFile, loadwordCutPoint, extraWords, np.float32)
 else:
     V, vocab2, word2dim =     load_embeddings(modelFile, loadwordCutPoint, extraWords, np.float32)
+
+if unigramFilename:
+    expVec = np.zeros( len(V[0]) )
+    expVecNorm1 = 0
+    expVecNorm2 = 0
+    totalWords = 0
+    expWords = 0
+    accumProb = 0.0
+    for w in vocab2:
+        totalWords += 1
+        if w in vocab:
+            expVec += V[ word2dim[w] ] * vocab[w][2]
+            expVecNorm1 += norm1( V[ word2dim[w] ] ) * vocab[w][2]
+            expVecNorm2 += normF( V[ word2dim[w] ] ) * vocab[w][2]
+            expWords += 1
+            accumProb += vocab[w][2]
+    
+    expVec /= accumProb
+    expVecNorm1 /= accumProb
+    expVecNorm2 /= accumProb
+    print "totally %d words, %d words in E[v]. |E[v]|: %.3f/%.3f, E[|v|]: %.3f/%.3f" %( totalWords, expWords, 
+                                                                norm1(expVec), normF(expVec), expVecNorm1, expVecNorm2 )
     
 model = vecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
 model.precompute_cosine()
@@ -122,19 +144,19 @@ spearmanCoeff, absentModelID2Word1, absentVocabWords1, cutVocabWords1 = \
 anaScores,     absentModelID2Word2, absentVocabWords2, cutVocabWords2 = \
             evaluate_ana( model, anaTestsets, anaTestsetNames, getAbsentWords, vocab, testwordCutPoint )
 
-# merge the two sets
-absentModelID2Word1.update(absentModelID2Word2)
-absentModelWordIDs = sorted( absentModelID2Word1.keys() )
-absentModelWords = [ absentModelID2Word1[i] for i in absentModelWordIDs ]
-
-absentVocabWords1.update(absentVocabWords2)
-absentVocabWords = sorted( absentVocabWords1.keys() )
-
-cutVocabWords1.update(cutVocabWords2)
-# sort by ID in ascending, so that most frequent words (smaller IDs) first
-cutVocabWords = sorted( cutVocabWords1.keys(), key=lambda w: vocab[w][0] )
-
 if getAbsentWords:
+    # merge the two sets of absent words
+    absentModelID2Word1.update(absentModelID2Word2)
+    absentModelWordIDs = sorted( absentModelID2Word1.keys() )
+    absentModelWords = [ absentModelID2Word1[i] for i in absentModelWordIDs ]
+    
+    absentVocabWords1.update(absentVocabWords2)
+    absentVocabWords = sorted( absentVocabWords1.keys() )
+    
+    cutVocabWords1.update(cutVocabWords2)
+    # sort by ID in ascending, so that most frequent words (smaller IDs) first
+    cutVocabWords = sorted( cutVocabWords1.keys(), key=lambda w: vocab[w][0] )
+
     print "\n%d absent words from the model:" %len(absentModelWordIDs)
     print "ID:"
     print ",".join( map( lambda i: str(i), absentModelWordIDs) )
