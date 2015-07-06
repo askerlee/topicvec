@@ -9,17 +9,19 @@ import os
 import glob
 
 # factorization weighted by unigram probs
-def uniwe_factorize(G, N, u, power=0.5, BigramWeight=None, testenv=None):
+# MAXITERS is not used. Only for API conformity
+def uniwe_factorize(G, u, N0, MAXITERS=0, testenv=None):
     timer = Timer( "uniwe_factorize()" )
     print "Begin factorization weighted by unigrams"
 
-    if BigramWeight is not None:
-        maxwe = np.max(BigramWeight) * 1.0
-        # normalize to [0,1]
-        BigramWeight = BigramWeight / maxwe
+#    if BigramWeight is not None:
+#        maxwe = np.max(BigramWeight) * 1.0
+#        # normalize to [0,1]
+#        BigramWeight = BigramWeight / maxwe
 
     Gsym  = sym(G)
 
+    power = 0.5
     Utrans = np.power(u, power)
     Weight = np.outer( Utrans, Utrans )
 
@@ -36,7 +38,7 @@ def uniwe_factorize(G, N, u, power=0.5, BigramWeight=None, testenv=None):
     posEigenSum = np.sum( es2[:d+1] )
     print "%d positive eigenvalues, sum: %.3f" %( d+1, posEigenSum )
 
-    d = N - 1
+    d = N0 - 1
     while es2[d] < 0 and d >= 0:
         d -= 1
     if d == -1:
@@ -62,9 +64,9 @@ def uniwe_factorize(G, N, u, power=0.5, BigramWeight=None, testenv=None):
     print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G - VV) )
     print "Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight), norm1(G - VV, Weight) )
 
-    if BigramWeight is not None:
-        print "Freq Weighted:"
-        print "VV: %.3f, G-VV: %.3f" %( norm1(VV, BigramWeight), norm1(G - VV, BigramWeight) )
+#    if BigramWeight is not None:
+#        print "Freq Weighted:"
+#        print "VV: %.3f, G-VV: %.3f" %( norm1(VV, BigramWeight), norm1(G - VV, BigramWeight) )
 
     if testenv:
         model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
@@ -126,7 +128,7 @@ def nowe_factorize(G, N):
 # Weighted factorization by bigram freqs, optimized using Gradient Descent algorithm
 # Weight: nonnegative weight matrix. Assume already normalized
 # N0: desired rank of V
-def we_factorize_GD(G, Weight, N0, testenv=None):
+def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
     timer1 = Timer( "we_factorize_GD()" )
     D = len(Weight)
 
@@ -151,7 +153,6 @@ def we_factorize_GD(G, Weight, N0, testenv=None):
 #    print "L2 Weighted: VV: %.3f, G-VV: %.3f" %tuple( matSizesF )
 
     print "\nBegin Gradient Descent of weighted factorization by bigram freqs"
-    MAXITERS = 5000
 
     #pdb.set_trace()
 
@@ -420,21 +421,54 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
     #pdb.set_trace()
     return V, VV
 
+def normalizeWeight( RawCounts, cutQuantile=0.0004, zero_weight_diagonal=True ):
+    np.sqrt(RawCounts, RawCounts)
+    Weight = RawCounts
+    idealCutPoint = getQuantileCut( Weight, cutQuantile )
+    totalElemCount = Weight.shape[0] * Weight.shape[1]
+    
+    if do_weight_cutoff:
+        cutEntryCount = np.sum( Weight > idealCutPoint )
+        Weight[ Weight > idealCutPoint ] = idealCutPoint
+        print "%d (%.3f%%) elements in Weight cut off at %.2f" %(cutEntryCount, 
+                                                        cutEntryCount * 100.0 / totalElemCount, idealCutPoint)
+
+    if zero_weight_diagonal:
+        for i in xrange(len(Weight)):
+            Weight[i,i]=0
+    
+    maxwe = np.max(Weight) * 1.0
+    # normalize to [0,1]
+    Weight = Weight / maxwe
+    return Weight
+    
+def factorize(alg, algName, G, Weight, N, MAX_ITERS, testenv):
+    V, VV = alg( G, Weight, N, MAX_ITERS, testenv )
+    A = G - VV
+    print
+    save_embeddings( "%d-%d-%s.vec" %(vocab_size, N, algName), vocab, V, "V" )
+    save_embeddings( "%d-%d-%s.residue" %(vocab_size, N, algName), vocab, A, "A" )
+    print
+    
 def main():
     kappa = 0.01
     # vector dimensionality
     N = 500
     # default -1 means to read all words
     topWordNum = -1
+    vocab_size = -1
     do_smoothing = True
     do_weight_cutoff = True
     extraWordFile = None
     do_UniWeight = False
     MAX_EM_ITERS = 0
     MAX_FW_ITERS = 0
+    # EM iters of the core words
+    MAX_CORE_EM_ITERS = 5
+    block_factorize = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"k:n:t:e:UE:F:C")
+        opts, args = getopt.getopt(sys.argv[1:],"k:n:t:e:UE:F:Cv:b")
         if len(args) != 1:
             raise getopt.GetoptError("")
         bigram_filename = args[0]
@@ -445,6 +479,8 @@ def main():
                 N = int(arg)
             if opt == '-t':
                 topWordNum = int(arg)
+            if opt == '-v':
+                vocab_size = int(arg)
             if opt == '-e':
                 extraWordFile = arg
             if opt == '-C':
@@ -455,62 +491,14 @@ def main():
                 MAX_EM_ITERS = int(arg)
             if opt == '-F':
                 MAX_FW_ITERS = int(arg)
-                
+            if opt == '-b':
+                block_factorize = True
+                    
     except getopt.GetoptError:
-        print 'Usage: factorize.py [ -k smoothness_k -n vector_dim -t top_word_num -e extra_word_file -U -E -F ] bigram_file'
+        print 'Usage: factorize.py [ -k smooth_k -n vec_dim -t topword_num -v vocab_size -e extra_word_file -U -E -F ] bigram_file'
         sys.exit(2)
 
-    extraWords = {}
-    if extraWordFile:
-        with open(extraWordFile) as f:
-            for line in f:
-                w, wid = line.strip().split('\t')
-                extraWords[w] = 1
-                
-    vocab, word2dim, G, F, u = loadBigramFile(bigram_filename, topWordNum, extraWords, kappa)
-    vocab_size = len(vocab)
-    
-    #B = np.array(B).T
-
-    # i,j was reversed when reading each word. Correct here
-    G = G.T
-    
-    # 1/16 is a reasonable quantile
-    #quants = np.append( 1.0 / np.array([1, 2, 4, 8, 16, 32, 64]), 0 )
-    #quantiles( F, quants, False )
-    sqrtF = np.sqrt( F.T )
-    Weight = sqrtF
-    idealCutPoint = getQuantileCut( Weight, 0.0004 )
-    totalElemCount = Weight.shape[0] * Weight.shape[1]
-    
-    if do_weight_cutoff:
-        cutEntryCount = np.sum(Weight > idealCutPoint)
-        Weight[ Weight > idealCutPoint ] = idealCutPoint
-        print "%d (%.3f%%) elements in Weight cut off at %.2f" %(cutEntryCount, 
-                                                        cutEntryCount * 100.0 / totalElemCount, idealCutPoint)
-    
-    del F
-    
-    #D = len(G)
-
-    Gsym = sym(G)
-    Gskew  = skew(G)
-
-    zero_weight_diagonal = True
-    if zero_weight_diagonal:
-        for i in xrange(len(Weight)):
-            Weight[i,i]=0
-
-    maxwe = np.max(Weight) * 1.0
-    # normalize to [0,1]
-    Weight = Weight / maxwe
-    #WeightSym = sym(Weight)
-
-    print "L1 Weighted G: %.3f, Gsym: %.3f, Gskew: %.3f" %tuple( matSizes( norm1, [G, Gsym, Gskew], Weight ) )
-#    print "L2 Weighted G: %.3f, Gsym: %.3f, Gskew: %.3f" %tuple( matSizes( normF, [G, Gsym, Gskew], Weight ) )
-
-    del Gsym, Gskew
-
+    # load testsets
     simTestsetDir = "D:/Dropbox/doc2vec/code/testsets/ws/"
     simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
     anaTestsetDir = "D:/Dropbox/doc2vec/code/testsets/analogy/"
@@ -523,31 +511,49 @@ def main():
     testenv = { 'vocab': vocab, 'word2dim': word2dim, 'simTestsets': simTestsets, 'simTestsetNames': simTestsetNames,
                  'anaTestsets': anaTestsets, 'anaTestsetNames': anaTestsetNames }
 
-    #we_factorize_GD( G, Weight, N, testenv )
-
-    if do_UniWeight:
-        V, VV = uniwe_factorize( G, N, u, 0.5, None, testenv )
-        A = G - VV
-        print
-        save_embeddings( "%d-%d-UNI.vec" %(vocab_size, N), vocab, V, "V" )
-        save_embeddings( "%d-%d-UNI.residue" %(vocab_size, N), vocab, A, "A" )
-        print
+    if block_factorize:
+        if topWordNum == -1:
+            print "-t has to be specified when doing blockwise factorization"
+            sys.exit(2)
+        if extraWordFile:
+            print "Extra word file is unnecessary when doing blockwise factorization"
+            sys.exit(2)
+            
+        vocab, word2dim, G, F, u = loadBigramFileBlock( bigram_filename, topWordNum, kappa, vocab_size )
+        vocab_size = len(vocab)
+        G11, G12, G21 = G
+        F11, F12, F21 = F
         
-    if MAX_EM_ITERS > 0:
-        V, VV = we_factorize_EM( G, Weight, N, MAX_EM_ITERS, testenv )
-        A = G - VV
-        print
-        save_embeddings( "%d-%d-EM.vec" %(vocab_size, N), vocab, V, "V" )
-        save_embeddings( "%d-%d-EM.residue" %(vocab_size, N), vocab, A, "A" )
-        print
+        # Weight11 modifies F11 in place. Memory copy is avoided
+        Weight11 = normalizeWeight(F11)
+        V11, VV11 = we_factorize_EM( G11, Weight11, N, MAX_CORE_EM_ITERS, testenv )
+        
+        
+    else:        
+        extraWords = {}
+        if extraWordFile:
+            with open(extraWordFile) as f:
+                for line in f:
+                    w, wid = line.strip().split('\t')
+                    extraWords[w] = 1
+                    
+        vocab, word2dim, G, F, u = loadBigramFile(bigram_filename, topWordNum, extraWords, kappa)
+        vocab_size = len(vocab)
+    
+        # Weight modifies F in place. Memory copy is avoided
+        Weight = normalizeWeight(F)
 
-    if MAX_FW_ITERS > 0:
-        V, VV = we_factorize_FW( G, Weight, N, MAX_FW_ITERS, testenv )
-        A = G - VV
-        print
-        save_embeddings( "%d-%d-FW.vec" %(vocab_size, N), vocab, V, "V" )
-        save_embeddings( "%d-%d-FW.residue" %(vocab_size, N), vocab, A, "A" )
-        print
+        #we_factorize_GD( G, Weight, N, testenv )
+        
+        # factorize(alg, algName, G, Weight, N, MAX_ITERS, testenv)
+        if do_UniWeight:
+            factorize(uniwe_factorize, "UNI", G, u, N, 0, testenv)
+            
+        if MAX_EM_ITERS > 0:
+            factorize(we_factorize_EM, "EM", G, Weight, N, MAX_EM_ITERS, testenv)
+    
+        if MAX_FW_ITERS > 0:
+            factorize(we_factorize_FW, "FW", G, Weight, N, MAX_EM_ITERS, testenv)
 
 
 if __name__ == '__main__':

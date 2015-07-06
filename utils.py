@@ -13,12 +13,12 @@ class Timer(object):
         self.name = name
         self.tstart = time.time()
 
-    def __del__(self):
+    def printTime(self):
         if self.name:
             print '%s elapsed: %.2f' % (self.name, time.time() - self.tstart)
         else:
             print 'Elapsed: %.2f' % (time.time() - self.tstart)
-
+        
 # Weight: nonnegative real matrix. If not specified, return the unweighted norm
 def norm1(M, Weight=None):
     if Weight is not None:
@@ -490,6 +490,220 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
 
     return vocab, word2dim, G, F, u
 
+# If topWordNum == -1, the core words are all demanded vocab words
+# If vocab_size == -1, the demanded vocab words are all words in the bigram file
+def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
+    print "Loading bigram file '%s' into 3 blocks:" %bigram_filename
+    BIGRAM = open(bigram_filename)
+    lineno = 0
+    vocab = []
+    word2dim = {}
+    # 1: headers, 2: bigrams. for error msg printing
+    stage = 1
+    do_smoothing=True
+    timer1 = Timer( "loadBigramFileInBlock()" )
+
+    try:
+        header = BIGRAM.readline()
+        lineno += 1
+        match = re.match( r"# (\d+) words, \d+ occurrences", header )
+        if not match:
+            raise ValueError(lineno, header)
+
+        wholeVocabSize = int(match.group(1))
+        print "Totally %d words"  %wholeVocabSize
+        
+        if vocab_size > wholeVocabSize:
+            raise ValueError( "%d words demanded, but only %d declared in header" %(vocab_size, wholeVocabSize) )
+        # all the words are included in the vocab
+        if vocab_size < 0:
+            vocab_size = wholeVocabSize
+                
+        # If topWordNum < 0, the core block is the whole matrix
+        # the returned upperright, lowerleft blocks will be empty
+        if topWordNum < 0:
+            topWordNum = vocab_size
+        elif topWordNum > vocab_size:
+            raise ValueError( "%d core words > %d total demanded words" %(topWordNum, vocab_size) )
+        
+        # skip params
+        header = BIGRAM.readline()
+        header = BIGRAM.readline()
+        lineno += 2
+
+        match = re.match( r"# (\d+) bigram occurrences", header )
+        if not match:
+            raise ValueError(lineno, header)
+
+        header = BIGRAM.readline()
+        lineno += 1
+
+        if header[0:6] != "Words:":
+            raise ValueError(lineno, header)
+
+        # vector log_u, log-probs of all unigrams
+        log_u0 = []
+
+        wc = 0
+        # Read the focus word list, build the word2dim mapping
+        # Read all context words of the topWordNum words
+        # Read top topWordNum context words of remaining words
+        while True:
+            header = BIGRAM.readline()
+            lineno += 1
+            header = header.rstrip()
+
+            # "Words" field ends
+            if not header:
+                break
+
+            if wc < vocab_size:
+                words = header.split("\t")
+                for word in words:
+                    w, freq, log_ui = word.split(",")
+                    word2dim[w] = wc
+                    log_u0.append(float(log_ui))
+                    vocab.append(w)
+                    wc += 1
+                    if vocab_size == wc:
+                        break
+                    
+        # Usually these two should match, unless the bigram file is corrupted
+        if wc != vocab_size:
+            raise ValueError( "%d words demanded, but only %d read" %(vocab_size, wc) )
+
+        print "%d words in file, top %d to read into vocab, top %d are core" %( wholeVocabSize, vocab_size, topWordNum )
+
+        log_u0 = np.array(log_u0)
+        u0 = np.exp(log_u0)
+        # unigram prob & logprob of the top topWordNum words
+        u1 = u0[0:topWordNum] / np.sum( u0[0:topWordNum] )
+        log_u1 = np.log(u1)
+        
+        k_u0 = kappa * u0
+        k_u1 = kappa * u1
+        remainNum = vocab_size - topWordNum
+        # G1/F1: the upper block (later split into upperleft and upperright blocks)
+        # G21/F21: the lowerleft block
+        # the lower right block (biggest) G22/F22 is ignored
+        G1 = np.zeros( (topWordNum, vocab_size), dtype=np.float32 )
+        G21 = np.zeros( (remainNum, topWordNum), dtype=np.float32 )
+        F1 = np.zeros( (topWordNum, vocab_size), dtype=np.float32 )
+        F21 = np.zeros( (remainNum, topWordNum), dtype=np.float32 )
+
+        header = BIGRAM.readline()
+        lineno += 1
+
+        if header[0:8] != "Bigrams:":
+            raise ValueError(lineno, header)
+
+        print "Read bigrams:"
+        stage = 2
+
+        line = BIGRAM.readline()
+        lineno += 1
+        focusWID = 0
+        # contextIDLimit: the limit of neighbor wid
+        # Currently read all neighbors
+        contextIDLimit = vocab_size
+        # wid offset of focus words to store in F/G
+        focusIDOffset = 0
+        
+        G = G1
+        F = F1
+        k_u = k_u0
+        log_u = log_u0
+        
+        while True:
+            line = line.strip()
+            # end of file
+            if not line:
+                break
+
+            # We have read the bigrams of all the wanted focus words
+            if focusWID == vocab_size:
+                break
+
+            orig_wid, w, neighborCount, freq, cutoffFreq = line.split(",")
+            orig_wid = int(orig_wid)
+
+            if orig_wid % 500 == 0:
+                print "\r%d\r" %orig_wid,
+
+            if focusWID == topWordNum:
+                contextIDLimit = topWordNum
+                focusIDOffset = topWordNum
+                G = G21
+                F = F21
+                k_u = k_u1
+                log_u = log_u1
+                print "%d core words are all read. Read remaining %d words" %(topWordNum, remainNum)
+                
+            # x_{.j}
+            x_j = np.zeros(contextIDLimit, dtype=np.float32)
+                
+            while True:
+                line = BIGRAM.readline()
+                lineno += 1
+
+                # Empty line. Should be end of file
+                if not line:
+                    break
+
+                # A comment. Just in case of future extension
+                # Currently only the last line in the file is a comment
+                if line[0] == '#':
+                    continue
+
+                # beginning of the next word. Continue at the outer loop
+                # Neighbor lines always start with '\t'
+                if line[0] != '\t':
+                    break
+
+                line = line.strip()
+                neighbors = line.split("\t")
+                for neighbor in neighbors:
+                    w2, freq2, log_bij = neighbor.split(",")
+                    i = word2dim[w2]
+                    if i < contextIDLimit:
+                        x_j[i] = int(freq2)
+
+            if do_smoothing:
+                x_j_norm1 = norm1(x_j)
+                utrans = x_j_norm1 * k_u
+                x_j += utrans
+
+                F[ focusWID - focusIDOffset ] = x_j
+
+                # normalization
+                b_j = x_j / np.sum(x_j)
+
+                logb_j = np.log(b_j)
+                G[ focusWID - focusIDOffset ] = logb_j - log_u
+                focusWID += 1
+
+    except ValueError, e:
+        if len( e.args ) == 2:
+            print "Unknown line %d:\n%s" %( e.args[0], e.args[1] )
+        else:
+            exc_type, exc_obj, tb = sys.exc_info()
+            print "Source line %d: %s" %(tb.tb_lineno, e)
+            if stage == 1:
+                print header
+            else:
+                print line
+        exit(0)
+
+    print
+    BIGRAM.close()
+
+    G11 = G1[ :, :topWordNum ]
+    G12 = G1[ :, topWordNum: ]
+    F11 = F1[ :, :topWordNum ]
+    F12 = F1[ :, topWordNum: ]
+    
+    return vocab, word2dim, [ G11, G12, G21 ], [ F11, F12, F21 ], u0
+    
 def loadUnigramFile(filename):
     UNI = open(filename)
     vocab_dict = {}

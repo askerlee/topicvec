@@ -12,7 +12,7 @@ our $corpus_dir;
 
 our %options = ( mode => '2', nofilter => 0, c => 0, input => "", dir => "",
                  f1 => "top1grams.txt", f2 => "top2grams.txt",
-				 minwords_sentence => 5, window => 3, dyn => 0, top1 => 15000, # '0' means to count all words
+				 minwords_sentence => 5, window => 3, dyn => 0, top1 => 0, # '0' means to count all words
 				 thres1 => '100,5e-8', thres2 => '0,0', # '5,0.0005'
 			   );
 
@@ -60,7 +60,7 @@ Getopt::Long::Configure("bundling", "ignore_case");
 
 GetOptions( \%options, 'dir|d=s', 'input|i=s', 'nofilter', 'c', 'mode|m=i', 'f1=s', 'f2=s',
 		    'suffix|s=s', 'filecount=i', 'window|w=i', 'dyn', 'thres1=s', 'thres2=s',
-		    'top1=i', 'extra|e=s' ) || usage();
+		    'top1=i', 'extra|e=s', 'minwords_sentence=i' ) || usage();
 
 if( ! $options{'dir'} && ! $options{'input'}
                             ||
@@ -345,7 +345,9 @@ sub countBigramFreqInWindow
 			next if $j == $i;
 			my $w2 = $words->[$j];
 			next if !exists $interestWord2ID{$w2};
-			$bigram2freq{$w}{$w2}++;
+			# $w2 is always at the left of $w
+			# $w: focus word, $w2: context word
+			$bigram2freq{$w2}{$w}++;
     		$unigram2freq{$w}++;
     		$allBigramOccur++;
 		}
@@ -382,7 +384,7 @@ sub outputTopBigrams
 	my $OUTF;
 	open($OUTF, "> $topbigramFilename") || die "Cannot open '$topbigramFilename' to write: $!\n";
 
-	# sort central words according to their total frequencies
+	# sort context words according to their total frequencies
 	my @words = sort { $unigram2freq{$b} <=> $unigram2freq{$a} } keys %bigram2freq;
 
 	my $w;
@@ -393,10 +395,11 @@ sub outputTopBigrams
 		my $min2gramfreq2 = int( $min2gramprob * $unigram2freq{$w} );
 		$min2gramfreq = max( $min2gramfreq, $min2gramfreq2 );
 
+        # all focus words (above freq threshold) with context $w
 		my @neighbors = grep { $bigram2freq{$w}{$_} >= $min2gramfreq }
 						keys %{ $bigram2freq{$w} };
 
-		# some words have all neighbors filtered. ignore them
+		# some context words have all focus words filtered. ignore them, keep others
 		if( @neighbors > 0 ){
 		    push @words2, $w;
 		    $wordCount++;
@@ -558,9 +561,10 @@ sub trunc
 __DATA__
 __CPP__
 
-#undef open
+#undef fopen
 #undef seekdir
 #undef seed
+#undef setbuf
 
 #include <hash_map>
 #include <algorithm>
@@ -831,7 +835,7 @@ void countBigramFreqInWindow_(vector<string>& words, int window)
 			int w2id = lookupWordID(w2);
 			if( w2id < 0 )
 			    continue;
-    		bigram2freq[wid][w2id]++;
+    		bigram2freq[w2id][wid]++;
 			unigram2freq[wid]++;
     		allBigramOccur++;
 		}
@@ -968,7 +972,7 @@ void outputTopBigrams_(const char* topbigramFilename)
     typedef pair<int, int> P;
     vector<P> wIDfreqs;
     
-	// sort central words according to their total frequencies
+	// sort context words according to their total frequencies
     sortVec2Pairs<int>( unigram2freq, interestWord2ID.size(), wIDfreqs );
 
 	vector<int> wordIDs;
@@ -988,11 +992,12 @@ void outputTopBigrams_(const char* topbigramFilename)
 		int min2gramfreq2 = int( opt.min2gramprob * unigram2freq[wid] );
 		int min2gramfreq = max( opt.min2gramfreq, min2gramfreq2 );
 
+        // all focus words (above freq threshold) with context ID2word[wid]
         // pw_hash->second is the second level hash
         int neighborCount = count_if( pw_hash.begin(), pw_hash.end(), 
                                       [ min2gramfreq ]( const P& p2 ){ return p2.second > min2gramfreq; } );
                                         
-		// some words have all neighbors filtered. ignore them
+		// some context words have all focus words filtered. ignore them, keep others
 		if( neighborCount > 0 ){
 		    wordIDs.push_back(wid);
 		    wordCount++;

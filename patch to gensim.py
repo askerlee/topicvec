@@ -9,7 +9,8 @@
             infile = bz2.BZ2File(self.fname)
         else:
             infile = open(self.fname)
-
+        texts = ((text, self.lemmatize, title, pageid) for title, text, pageid in extract_pages(infile, self.filter_namespaces))
+        
 # add "keep_poss=True"
 def tokenize(content):
     return [token.encode('utf8') for token in utils.tokenize(content, lower=True, errors='ignore', keep_poss=True)
