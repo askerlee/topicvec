@@ -449,7 +449,7 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
 
     for Weight in RawCounts:
         # normalize to [0,1]
-        Weight = Weight / maxwe
+        Weight /= maxwe
 
     if len(RawCounts) == 1:
         return RawCounts[0]
@@ -500,13 +500,19 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
     V = np.concatenate( (V11, V21) )
     
     if test_block:
+        print "Test EM on the complete matrix\n"
         VV = np.dot( V, V.T )
         G0 = G[3]
-        Weight = normalizeWeight( [ F[3] ], do_weight_cutoff )
+        Weight0 = normalizeWeight( [ F[3] ], do_weight_cutoff )
         print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G0 - VV) )
-        print "Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight), norm1(G0 - VV, Weight) )
+        print "Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight0), norm1(G0 - VV, Weight0) )
+        
+        testenv['word2dim'] = testenv['word2dim_all']
+        we_factorize_EM( G0, Weight0, N0, MAXITERS, testenv )
+        print
         
     if testenv:
+        print "Test embeddings derived from block factorization\n"
         model = vecModel( V, testenv['vocab'], testenv['word2dim_all'], vecNormalize=True )
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
