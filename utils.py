@@ -498,7 +498,9 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     BIGRAM = open(bigram_filename)
     lineno = 0
     vocab = []
-    word2dim = {}
+    word2dim_all = {}
+    word2dim_core = {}
+    
     # 1: headers, 2: bigrams. for error msg printing
     stage = 1
     do_smoothing=True
@@ -546,7 +548,7 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
         log_u0 = []
 
         wc = 0
-        # Read the focus word list, build the word2dim mapping
+        # Read the focus word list, build the word2dim_all / word2dim_core mapping
         # Read all context words of the core_size words
         # Read top core_size context words of remaining words
         while True:
@@ -562,7 +564,10 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
                 words = header.split("\t")
                 for word in words:
                     w, freq, log_ui = word.split(",")
-                    word2dim[w] = wc
+                    word2dim_all[w] = wc
+                    if wc < core_size:
+                        word2dim_core[w] = wc
+                        
                     log_u0.append(float(log_ui))
                     vocab.append(w)
                     wc += 1
@@ -632,7 +637,7 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
             orig_wid, w, neighborCount, freq, cutoffFreq = line.split(",")
             orig_wid = int(orig_wid)
 
-            if orig_wid % 500 == 0:
+            if orig_wid % 300 == 0:
                 print "\r%d\r" %orig_wid,
 
             if focusWID == core_size:
@@ -671,7 +676,9 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
                 neighbors = line.split("\t")
                 for neighbor in neighbors:
                     w2, freq2, log_bij = neighbor.split(",")
-                    i = word2dim[w2]
+                    if w2 not in word2dim_all:
+                        continue
+                    i = word2dim_all[w2]
                     freq2 = int(freq2)
                     if i < contextIDLimit:
                         x_j[i] = freq2
@@ -724,9 +731,9 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     F12 = F1[ :, core_size: ]
     
     if test_alg:
-        return vocab, word2dim, [ G11, G12, G21, G0 ], [ F11, F12, F21, F0 ], u0
+        return vocab, word2dim_all, word2dim_core, [ G11, G12, G21, G0 ], [ F11, F12, F21, F0 ], u0
     else:
-        return vocab, word2dim, [ G11, G12, G21 ], [ F11, F12, F21 ], u0
+        return vocab, word2dim_all, word2dim_core, [ G11, G12, G21 ], [ F11, F12, F21 ], u0
         
 def loadUnigramFile(filename):
     UNI = open(filename)
@@ -929,7 +936,7 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
     # a set of scores, in the same order as in testsets
     # each is a tuple (add_score, mul_score)
     anaScores = []
-
+    
     #pdb.set_trace()
 
     for i,testset in enumerate(testsets):
@@ -939,13 +946,14 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
         correct_add = 0.0
         correct_mul = 0.0
         validPairNum = 0
-        currentScore = 0.0
-
+        currentScores = np.array( [ 0.0, 0.0 ] )
+        
         for j,analogy in enumerate(testset):
 
             allWordsPresent = True
             watchWhenWrong = False
 
+            # check presence of all words in this test pair
             for x in analogy:
                 if vocab_dict and x in vocab_dict:
                     xid = vocab_dict[x][0]
@@ -981,6 +989,7 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
                 currentScores = np.array([ correct_add, correct_mul, correct_L1, correct_L2 ]) / validPairNum
                 """
 
+                # latest cumulative scores
                 currentScores = np.array( [ correct_add, correct_mul ] ) / validPairNum
 
             if j % 500 == 499:

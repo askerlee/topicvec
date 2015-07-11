@@ -456,7 +456,7 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
     else:
         return RawCounts
 
-def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None, test_alg=False ):
+def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None, test_block=False ):
     # core_size * core_size, core_size * noncore_size, noncore_size * core_size
     G11, G12, G21 = G[0:3]
     F11, F12, F21 = F[0:3]
@@ -464,6 +464,8 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
     noncore_size = len(G21)
 
     Weight11 = normalizeWeight( [ F11 ], do_weight_cutoff)
+    testenv['word2dim'] = testenv['word2dim_core']
+
     # get embeddings of core words
     # core_size * N0, core_size * core_size
     V11, VV11 = we_factorize_EM( G11, Weight11, N0, MAXITERS, testenv )
@@ -495,9 +497,9 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
 
     print
 
-    V = np.concatenate( V11, V21 )
+    V = np.concatenate( (V11, V21) )
     
-    if test_alg:
+    if test_block:
         VV = np.dot( V, V.T )
         G0 = G[3]
         Weight = normalizeWeight( [ F[3] ], do_weight_cutoff )
@@ -505,7 +507,7 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
         print "Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight), norm1(G0 - VV, Weight) )
         
     if testenv:
-        model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
+        model = vecModel( V, testenv['vocab'], testenv['word2dim_all'], vecNormalize=True )
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -535,7 +537,7 @@ def main():
     topWordNum = -1
     vocab_size = -1
     core_size = -1
-    test_alg = True
+    test_block = True
     
     do_smoothing = True
     do_weight_cutoff = True
@@ -580,9 +582,9 @@ def main():
         sys.exit(2)
 
     # load testsets
-    simTestsetDir = "D:/Dropbox/doc2vec/code/testsets/ws/"
-    simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
-    anaTestsetDir = "D:/Dropbox/doc2vec/code/testsets/analogy/"
+    simTestsetDir = "D:/Dropbox/topicvec/code/testsets/ws/"
+    simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men" ] #, "radinsky_mturk" , "luong_rare", "simlex_999a" ]
+    anaTestsetDir = "D:/Dropbox/topicvec/code/testsets/analogy/"
     anaTestsetNames = [ "google", "msr" ]
 
     simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)
@@ -593,19 +595,17 @@ def main():
                  'anaTestsets': anaTestsets, 'anaTestsetNames': anaTestsetNames }
 
     if do_block_factorize:
-        if topWordNum == -1:
-            print "-t has to be specified when doing blockwise factorization"
-            sys.exit(2)
         if extraWordFile:
             print "Extra word file is unnecessary when doing blockwise factorization"
             sys.exit(2)
 
-        vocab, word2dim, G, F, u = loadBigramFileInBlock( bigram_filename, core_size, vocab_size, kappa, test_alg )
+        vocab, word2dim_all, word2dim_core, G, F, u = loadBigramFileInBlock( bigram_filename, core_size, vocab_size, kappa, test_block )
         testenv['vocab'] = vocab
-        testenv['word2dim'] = word2dim
-
+        testenv['word2dim_all'] = word2dim_all
+        testenv['word2dim_core'] = word2dim_core
+        
         # block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None )
-        block_factorize( G, F, N0, core_size, True, 5, vocab, testenv )
+        block_factorize( G, F, N0, core_size, True, 5, vocab, testenv, test_block )
 
     else:
         extraWords = {}
