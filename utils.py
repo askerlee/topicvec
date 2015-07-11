@@ -286,7 +286,7 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
     # V: embeddings, vocab: array of words, word2dim: dict of word to index in V        
     return V, vocab, word2dim
 
-def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
+def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
     print "Loading bigram file '%s':" %bigram_filename
     BIGRAM = open(bigram_filename)
     lineno = 0
@@ -490,9 +490,10 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa):
 
     return vocab, word2dim, G, F, u
 
-# If topWordNum == -1, the core words are all demanded vocab words
+# If core_size == -1, the core words are all demanded vocab words
 # If vocab_size == -1, the demanded vocab words are all words in the bigram file
-def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
+# If test_alg=True, load three blocks, as well as the whole matrix in G[3]&F[3]
+def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01, test_alg=False):
     print "Loading bigram file '%s' into 3 blocks:" %bigram_filename
     BIGRAM = open(bigram_filename)
     lineno = 0
@@ -519,12 +520,12 @@ def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
         if vocab_size < 0:
             vocab_size = wholeVocabSize
                 
-        # If topWordNum < 0, the core block is the whole matrix
+        # If core_size < 0, the core block is the whole matrix
         # the returned upperright, lowerleft blocks will be empty
-        if topWordNum < 0:
-            topWordNum = vocab_size
-        elif topWordNum > vocab_size:
-            raise ValueError( "%d core words > %d total demanded words" %(topWordNum, vocab_size) )
+        if core_size < 0:
+            core_size = vocab_size
+        elif core_size > vocab_size:
+            raise ValueError( "%d core words > %d total demanded words" %(core_size, vocab_size) )
         
         # skip params
         header = BIGRAM.readline()
@@ -541,13 +542,13 @@ def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
         if header[0:6] != "Words:":
             raise ValueError(lineno, header)
 
-        # vector log_u, log-probs of all unigrams
+        # vector log_u, log-probs of all unigrams (at most vocab_size unigrams)
         log_u0 = []
 
         wc = 0
         # Read the focus word list, build the word2dim mapping
-        # Read all context words of the topWordNum words
-        # Read top topWordNum context words of remaining words
+        # Read all context words of the core_size words
+        # Read top core_size context words of remaining words
         while True:
             header = BIGRAM.readline()
             lineno += 1
@@ -572,25 +573,29 @@ def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
         if wc != vocab_size:
             raise ValueError( "%d words demanded, but only %d read" %(vocab_size, wc) )
 
-        print "%d words in file, top %d to read into vocab, top %d are core" %( wholeVocabSize, vocab_size, topWordNum )
+        print "%d words in file, top %d to read into vocab, top %d are core" %( wholeVocabSize, vocab_size, core_size )
 
         log_u0 = np.array(log_u0)
         u0 = np.exp(log_u0)
-        # unigram prob & logprob of the top topWordNum words
-        u1 = u0[0:topWordNum] / np.sum( u0[0:topWordNum] )
+        # unigram prob & logprob of the top core_size words
+        u1 = u0[0:core_size]
+        u1 = u1 / np.sum(u1)
         log_u1 = np.log(u1)
         
         k_u0 = kappa * u0
         k_u1 = kappa * u1
-        remainNum = vocab_size - topWordNum
+        remainNum = vocab_size - core_size
         # G1/F1: the upper block (later split into upperleft and upperright blocks)
         # G21/F21: the lowerleft block
         # the lower right block (biggest) G22/F22 is ignored
-        G1 = np.zeros( (topWordNum, vocab_size), dtype=np.float32 )
-        G21 = np.zeros( (remainNum, topWordNum), dtype=np.float32 )
-        F1 = np.zeros( (topWordNum, vocab_size), dtype=np.float32 )
-        F21 = np.zeros( (remainNum, topWordNum), dtype=np.float32 )
-
+        G1 = np.zeros( (core_size, vocab_size), dtype=np.float32 )
+        G21 = np.zeros( (remainNum, core_size), dtype=np.float32 )
+        F1 = np.zeros( (core_size, vocab_size), dtype=np.float32 )
+        F21 = np.zeros( (remainNum, core_size), dtype=np.float32 )
+        if test_alg:
+            G0 = np.zeros( (vocab_size, vocab_size), dtype=np.float32 )
+            F0 = np.zeros( (vocab_size, vocab_size), dtype=np.float32 )
+            
         header = BIGRAM.readline()
         lineno += 1
 
@@ -630,18 +635,20 @@ def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
             if orig_wid % 500 == 0:
                 print "\r%d\r" %orig_wid,
 
-            if focusWID == topWordNum:
-                contextIDLimit = topWordNum
-                focusIDOffset = topWordNum
+            if focusWID == core_size:
+                contextIDLimit = core_size
+                focusIDOffset = core_size
                 G = G21
                 F = F21
                 k_u = k_u1
                 log_u = log_u1
-                print "%d core words are all read. Read remaining %d words" %(topWordNum, remainNum)
+                print "%d core words are all read. Read remaining %d words" %(core_size, remainNum)
                 
             # x_{.j}
             x_j = np.zeros(contextIDLimit, dtype=np.float32)
-                
+            if test_alg:
+                x0_j = np.zeros(vocab_size, dtype=np.float32)
+            
             while True:
                 line = BIGRAM.readline()
                 lineno += 1
@@ -665,23 +672,37 @@ def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
                 for neighbor in neighbors:
                     w2, freq2, log_bij = neighbor.split(",")
                     i = word2dim[w2]
+                    freq2 = int(freq2)
                     if i < contextIDLimit:
-                        x_j[i] = int(freq2)
-
+                        x_j[i] = freq2
+                    if test_alg:
+                        x0_j[i] = freq2
+                    
             if do_smoothing:
                 x_j_norm1 = norm1(x_j)
                 utrans = x_j_norm1 * k_u
                 x_j += utrans
+                
+                if test_alg:
+                    x0_j_norm1 = norm1(x0_j)
+                    u0trans = x0_j_norm1 * k_u0
+                    x0_j += u0trans
+                    
+            F[ focusWID - focusIDOffset ] = x_j
 
-                F[ focusWID - focusIDOffset ] = x_j
-
-                # normalization
-                b_j = x_j / np.sum(x_j)
-
-                logb_j = np.log(b_j)
-                G[ focusWID - focusIDOffset ] = logb_j - log_u
-                focusWID += 1
-
+            # normalization
+            b_j = x_j / np.sum(x_j)
+            logb_j = np.log(b_j)
+            G[ focusWID - focusIDOffset ] = logb_j - log_u
+            
+            if test_alg:
+                F0[focusWID] = x0_j
+                b0_j = x0_j / np.sum(x0_j)
+                logb0_j = np.log(b0_j)
+                G0[focusWID] = logb0_j - log_u0
+                
+            focusWID += 1
+                
     except ValueError, e:
         if len( e.args ) == 2:
             print "Unknown line %d:\n%s" %( e.args[0], e.args[1] )
@@ -697,13 +718,16 @@ def loadBigramFileInBlock(bigram_filename, topWordNum, kappa, vocab_size=-1):
     print
     BIGRAM.close()
 
-    G11 = G1[ :, :topWordNum ]
-    G12 = G1[ :, topWordNum: ]
-    F11 = F1[ :, :topWordNum ]
-    F12 = F1[ :, topWordNum: ]
+    G11 = G1[ :, :core_size ]
+    G12 = G1[ :, core_size: ]
+    F11 = F1[ :, :core_size ]
+    F12 = F1[ :, core_size: ]
     
-    return vocab, word2dim, [ G11, G12, G21 ], [ F11, F12, F21 ], u0
-    
+    if test_alg:
+        return vocab, word2dim, [ G11, G12, G21, G0 ], [ F11, F12, F21, F0 ], u0
+    else:
+        return vocab, word2dim, [ G11, G12, G21 ], [ F11, F12, F21 ], u0
+        
 def loadUnigramFile(filename):
     UNI = open(filename)
     vocab_dict = {}
