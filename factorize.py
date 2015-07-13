@@ -73,6 +73,8 @@ def uniwe_factorize(G, u, N0, MAXITERS=0, testenv=None):
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
+    timer.printElapseTime()
+    
     return V, VV
 
 # Factorization without weighting
@@ -122,6 +124,8 @@ def nowe_factorize(G, N):
 
     print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G - VV) )
     print "No Weight Gsym: %.3f, Gsym-VV: %.3f" %( norm1(Gsym), norm1(Gsym - VV) )
+
+    timer.printElapseTime()
 
     return V, VV
 
@@ -192,6 +196,11 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
+        timer2.printElapseTime()
+
+    timer1.printElapseTime()
+
+
 # Weighted factorization by bigram freqs, optimized using EM algorithm
 # if MAXITERS==1, it's identical to nowe_factorize()
 # Weight: nonnegative weight matrix. Assume already normalized
@@ -234,6 +243,10 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
+        timer2.printElapseTime()
+        
+    timer1.printElapseTime()
+            
     return V, VV
 
 # Weighted factorization by bigram freqs, optimized using Frank-Wolfe algorithm
@@ -412,11 +425,15 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
 #                X, Gsym_VV, G_VV = X_old, Gsym_VV_old, G_VV_old
 #                break
 
+        timer2.printElapseTime()
+
     V, VV, vs, es = lowrank_fact(X, N0)
 
     print "Eigenvalue range: %f ~ %f\n" %(es[-1], es[0])
     print "End of Frank-Wolfe"
     print
+
+    timer1.printElapseTime()
 
     #pdb.set_trace()
     return V, VV
@@ -483,6 +500,8 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
     # noncore_size * N0
     V21 = np.zeros( ( noncore_size, N0 ) )
 
+    timer = Timer()
+    
     # Find each noncore word's embedding
     for i in xrange(noncore_size):
         # core_size
@@ -493,7 +512,8 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
         VWV = np.dot( V11.T, diagwi ).dot(V11)
         V21[i] = np.linalg.inv(VWV).dot( V11.T.dot(diagwi).dot(Gwmean[i]) )
         if i > 0 and i % 100 == 0:
-            print "%d / %d" %(i,noncore_size)
+            print "\r%d / %d." %(i,noncore_size),
+            print timer.getElapseTime(), "\r",
 
     print
 
@@ -543,7 +563,7 @@ def main():
     topWordNum = -1
     vocab_size = -1
     core_size = -1
-    test_block = True
+    test_block = False
     
     do_smoothing = True
     do_weight_cutoff = True
@@ -589,7 +609,7 @@ def main():
 
     # load testsets
     simTestsetDir = "D:/Dropbox/topicvec/code/testsets/ws/"
-    simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men" ] #, "radinsky_mturk" , "luong_rare", "simlex_999a" ]
+    simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
     anaTestsetDir = "D:/Dropbox/topicvec/code/testsets/analogy/"
     anaTestsetNames = [ "google", "msr" ]
 

@@ -13,12 +13,18 @@ class Timer(object):
         self.name = name
         self.tstart = time.time()
 
-    def printTime(self):
-        if self.name:
-            print '%s elapsed: %.2f' % (self.name, time.time() - self.tstart)
+    def getElapseTime(self, isStr=True):
+        if isStr:
+            if self.name:
+                return '%s elapsed: %.2f' % (self.name, time.time() - self.tstart)
+            else:
+                return 'Elapsed: %.2f' % (time.time() - self.tstart)
         else:
-            print 'Elapsed: %.2f' % (time.time() - self.tstart)
-        
+            return time.time() - self.tstart
+                        
+    def printElapseTime(self):
+        print self.getElapseTime()
+           
 # Weight: nonnegative real matrix. If not specified, return the unweighted norm
 def norm1(M, Weight=None):
     if Weight is not None:
@@ -294,6 +300,9 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
     word2dim = {}
     # 1: headers, 2: bigrams. for error msg printing
     stage = 1
+    # must be True. Otherwise some entries in logb_j will be log of 0
+    # After smoothing, entries in b_j are always positive, thus logb_j is fine
+    # To reduce code modifications, this flag is not removed
     do_smoothing=True
     timer1 = Timer( "loadBigramFile()" )
 
@@ -330,7 +339,7 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
 
         i = 0
         wc = 0
-        # Read the focus word list, build the word2dim mapping
+        # Read the word list, build the word2dim mapping
         # Keep first topWordNum words and words in extraWords, if any
         while True:
             header = BIGRAM.readline()
@@ -390,7 +399,7 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
             if not line:
                 break
 
-            # We have read the bigrams of all the wanted focus words
+            # If we have read the bigrams of all the wanted words
             if wid == vocab_size:
                 # if some words in extraWords are not read, there is bug
                 break
@@ -404,7 +413,7 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
             if orig_wid <= topWordNum or w in extraWords:
                 readNeighbors = True
                 # remove it from the extra list, as a double-check measure
-                # when all wanted focus words are read, the extra list should be empty
+                # when all wanted words are read, the extra list should be empty
                 if w in extraWords:
                     del extraWords[w]
             else:
@@ -412,7 +421,8 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
 
             # x_{.j}
             x_j = np.zeros(vocab_size, dtype=np.float32)
-
+            skipRemainingNeighbors = False
+            
             while True:
                 line = BIGRAM.readline()
                 lineno += 1
@@ -431,23 +441,28 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
                 if line[0] != '\t':
                     break
 
-                # if the current focus word is not wanted, skip these lines
-                if not readNeighbors:
+                # if the current context word is not wanted, skip these lines
+                if not readNeighbors or skipRemainingNeighbors:
                     continue
 
                 line = line.strip()
                 neighbors = line.split("\t")
                 for neighbor in neighbors:
                     w2, freq2, log_bij = neighbor.split(",")
-                    # words not in vocab are ignored
                     if w2 in word2dim:
                         i = word2dim[w2]
                         x_j[i] = int(freq2)
-
+                    # when meeting the first focus word not in vocab, all following focus words are not in vocab
+                    # since neighbors are sorted ascendingly by ID
+                    # So they are skipped to speed up reading
+                    else:
+                        skipRemainingNeighbors = True
+                        break
+                        
             # B stores original probs
             #B.append( x_j / np.sum(x_j) )
 
-            # only push to F & G when the focus word is wanted
+            # only push to F & G when this word is wanted
             if readNeighbors:
                 # append a copy of x_j by * 1
                 # otherwise only append a pointer. The contents may be changed accidentally elsewhere
@@ -503,6 +518,9 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     
     # 1: headers, 2: bigrams. for error msg printing
     stage = 1
+    # must be True. Otherwise some entries in logb_j will be log of 0
+    # After smoothing, entries in b_j are always positive, thus logb_j is fine
+    # To reduce code modifications, this flag is not removed
     do_smoothing=True
     timer1 = Timer( "loadBigramFileInBlock()" )
 
@@ -548,7 +566,7 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
         log_u0 = []
 
         wc = 0
-        # Read the focus word list, build the word2dim_all / word2dim_core mapping
+        # Read the focus list, build the word2dim_all / word2dim_core mapping
         # Read all context words of the core_size words
         # Read top core_size context words of remaining words
         while True:
@@ -612,17 +630,19 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
 
         line = BIGRAM.readline()
         lineno += 1
-        focusWID = 0
-        # contextIDLimit: the limit of neighbor wid
+        contextWID = 0
+        # focusIDLimit: the limit of neighbor wid
         # Currently read all neighbors
-        contextIDLimit = vocab_size
-        # wid offset of focus words to store in F/G
-        focusIDOffset = 0
+        focusIDLimit = vocab_size
+        # wid offset of context words to store in F/G
+        contextIDOffset = 0
         
         G = G1
         F = F1
         k_u = k_u0
         log_u = log_u0
+        
+        #pdb.set_trace()
         
         while True:
             line = line.strip()
@@ -630,8 +650,8 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
             if not line:
                 break
 
-            # We have read the bigrams of all the wanted focus words
-            if focusWID == vocab_size:
+            # We have read the bigrams of all the wanted words
+            if contextWID == vocab_size:
                 break
 
             orig_wid, w, neighborCount, freq, cutoffFreq = line.split(",")
@@ -640,9 +660,9 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
             if orig_wid % 300 == 0:
                 print "\r%d\r" %orig_wid,
 
-            if focusWID == core_size:
-                contextIDLimit = core_size
-                focusIDOffset = core_size
+            if contextWID == core_size:
+                focusIDLimit = core_size
+                contextIDOffset = core_size
                 G = G21
                 F = F21
                 k_u = k_u1
@@ -650,9 +670,11 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
                 print "%d core words are all read. Read remaining %d words" %(core_size, remainNum)
                 
             # x_{.j}
-            x_j = np.zeros(contextIDLimit, dtype=np.float32)
+            x_j = np.zeros(focusIDLimit, dtype=np.float32)
             if test_alg:
                 x0_j = np.zeros(vocab_size, dtype=np.float32)
+            
+            skipRemainingNeighbors = False
             
             while True:
                 line = BIGRAM.readline()
@@ -672,18 +694,30 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
                 if line[0] != '\t':
                     break
 
+                if skipRemainingNeighbors:
+                    continue
+                    
                 line = line.strip()
                 neighbors = line.split("\t")
                 for neighbor in neighbors:
                     w2, freq2, log_bij = neighbor.split(",")
+
+                    # when meeting the first focus word not in vocab, all following focus words are not in vocab
+                    # since neighbors are sorted ascendingly by ID
+                    # So they are skipped to speed up reading
                     if w2 not in word2dim_all:
-                        continue
+                        skipRemainingNeighbors = True
+                        break
+
                     i = word2dim_all[w2]
                     freq2 = int(freq2)
-                    if i < contextIDLimit:
+                    if i < focusIDLimit:
                         x_j[i] = freq2
                     if test_alg:
                         x0_j[i] = freq2
+                    elif i >= focusIDLimit:
+                        skipRemainingNeighbors = True
+                        break
                     
             if do_smoothing:
                 x_j_norm1 = norm1(x_j)
@@ -695,20 +729,20 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
                     u0trans = x0_j_norm1 * k_u0
                     x0_j += u0trans
                     
-            F[ focusWID - focusIDOffset ] = x_j
+            F[ contextWID - contextIDOffset ] = x_j
 
             # normalization
             b_j = x_j / np.sum(x_j)
             logb_j = np.log(b_j)
-            G[ focusWID - focusIDOffset ] = logb_j - log_u
+            G[ contextWID - contextIDOffset ] = logb_j - log_u
             
             if test_alg:
-                F0[focusWID] = x0_j
+                F0[contextWID] = x0_j
                 b0_j = x0_j / np.sum(x0_j)
                 logb0_j = np.log(b0_j)
-                G0[focusWID] = logb0_j - log_u0
+                G0[contextWID] = logb0_j - log_u0
                 
-            focusWID += 1
+            contextWID += 1
                 
     except ValueError, e:
         if len( e.args ) == 2:

@@ -13,7 +13,7 @@ our $corpus_dir;
 our %options = ( mode => '2', nofilter => 0, c => 0, input => "", dir => "",
                  f1 => "top1grams.txt", f2 => "top2grams.txt",
 				 minwords_sentence => 5, window => 3, dyn => 0, top1 => 0, # '0' means to count all words
-				 thres1 => '100,5e-8', thres2 => '0,0', # '5,0.0005'
+				 thres1 => '100,5e-8', thres2 => '1,0', # '5,0.0005'
 			   );
 
 $| = 1;
@@ -70,7 +70,7 @@ if( ! $options{'dir'} && ! $options{'input'}
 
 our %unigram2freq;
 our %bigram2freq;
-our %interestWord2ID;
+our %interestWords;
 our $interestWordsOn = 0;
 our $allBigramOccur = 0;
 
@@ -108,10 +108,12 @@ else{
 
 # use words in the file $options{'f1'} as the words of interest (words counted)
 # In bigram mode, interest words are always loaded and $interestWordsOn is always 1
-%interestWord2ID = %unigram2freq;
-if( keys %interestWord2ID > 0 ){
+# If in unigram mode, %unigram2freq is empty, then %interestWords will also be empty
+%interestWords = %unigram2freq;
+
+if( keys %interestWords > 0 ){
 	$interestWordsOn = 1;
-	print scalar keys %interestWord2ID, " interest words\n";
+	print scalar keys %interestWords, " interest words\n";
 }
 
 if( ! $options{nofilter} && $options{c} ){
@@ -126,7 +128,7 @@ if( $options{c} ){
                  $options{minwords_sentence}, $options{window}, $options{dyn}, $options{thres1}, $options{thres2} );
                  
     if($interestWordsOn){
-        passInterestWords_( [ keys %interestWord2ID ] );
+        passInterestWords_( [ keys %interestWords ] );
     }
 }
 
@@ -275,6 +277,7 @@ elsif( $options{mode} == 2 ){
 	}
 }
 
+# load a list of interesting words, initialize the freq to 0
 sub loadlist
 {
 	my ( $listFilename, $href, $topcount, $extraUnigramFile ) = @_;
@@ -311,7 +314,7 @@ sub loadlist
 sub countUnigramFreqInWindow
 {
 	for( @{$_[0]} ){
-		if( ! $interestWordsOn || exists $interestWord2ID{$_} ){
+		if( ! $interestWordsOn || exists $interestWords{$_} ){
 			$unigram2freq{$_}++;
 			$totalInterestWordCount++;
 		}
@@ -326,7 +329,7 @@ sub countBigramFreqInWindow
 
 	for( $i = 0; $i < @$words; $i++ ){
 		my $w = $words->[$i];
-		next if !exists $interestWord2ID{$w};
+		next if !exists $interestWords{$w};
 		$totalInterestWordCount++;
 		
 		my $windowSize;
@@ -344,7 +347,7 @@ sub countBigramFreqInWindow
 		for( $j = $leftborder; $j <= $rightborder; $j++ ){
 			next if $j == $i;
 			my $w2 = $words->[$j];
-			next if !exists $interestWord2ID{$w2};
+			next if !exists $interestWords{$w2};
 			# $w2 is always at the left of $w
 			# $w: focus word, $w2: context word
 			$bigram2freq{$w2}{$w}++;
@@ -386,7 +389,9 @@ sub outputTopBigrams
 
 	# sort context words according to their total frequencies
 	my @words = sort { $unigram2freq{$b} <=> $unigram2freq{$a} } keys %bigram2freq;
-
+	my $id = 0;
+    my %word2ID = map { $_ => $id++; } @words;
+    
 	my $w;
 	my @words2;
 	my $wordCount = 0;
@@ -440,7 +445,7 @@ sub outputTopBigrams
 		my $min2gramfreq2 = int( $min2gramprob * $unigram2freq{$w} );
 		$min2gramfreq = max( $min2gramfreq, $min2gramfreq2 );
 
-		my @neighbors = sort { $bigram2freq{$w}{$b} <=> $bigram2freq{$w}{$a} }
+		my @neighbors = sort { $word2ID{$a} <=> $word2ID{$b} }
 						grep { $bigram2freq{$w}{$_} >= $min2gramfreq }
 						keys %{ $bigram2freq{$w} };
 
@@ -779,6 +784,7 @@ int lookupWordID(string& word)
 	        if( ID2word.size() <= wid )
 	            ID2word.resize( wid * 2 + 2 );
 	        
+	        // unlikely to happen, as bigram2freq has been resized when passInterestWords_()
 	        if( opt.mode == 2 && bigram2freq.size() <= wid )
 	            bigram2freq.resize( wid * 2 + 2 );
 	        
@@ -829,7 +835,7 @@ void countBigramFreqInWindow_(vector<string>& words, int window)
 		rightborder = i - 1;
 
 		for( j = leftborder; j <= rightborder; j++ ){
-			if(j == i)
+			if( j == i )
 			    continue;
 			string& w2 = words[j];
 			int w2id = lookupWordID(w2);
@@ -971,13 +977,22 @@ void outputTopBigrams_(const char* topbigramFilename)
 
     typedef pair<int, int> P;
     vector<P> wIDfreqs;
+
+	int min1gramfreq2 = int( opt.min1gramprob * totalInterestWordCount );
+	int min1gramfreq = max( opt.min1gramfreq, min1gramfreq2 );
+	printf( "Words cut-off frequency: %d\n", min1gramfreq );
     
-	// sort context words according to their total frequencies
+    // unigram2freq is a vector, not a hash_map
+	// sort focus words according to their total frequencies
     sortVec2Pairs<int>( unigram2freq, interestWord2ID.size(), wIDfreqs );
 
-	vector<int> wordIDs;
+	vector<int> outputWordIDs;
 	int wordCount = 0;
+    double allKeptUnigramOccur = 0;
 
+    vector<int> wordID2outputRank;
+    wordID2outputRank.resize( interestWord2ID.size() );
+    
     int i = 0;
 	for( auto iter = wIDfreqs.begin(); iter != wIDfreqs.end(); ++iter ){
 	    int wid = iter->first;
@@ -989,18 +1004,26 @@ void outputTopBigrams_(const char* topbigramFilename)
 	    if( pw_hash.size() == 0 )
 	        continue;
 
+        // Some interesting words have too low frequencies, cut off here
+        if( iter->second < min1gramfreq )
+            break;
+            
 		int min2gramfreq2 = int( opt.min2gramprob * unigram2freq[wid] );
 		int min2gramfreq = max( opt.min2gramfreq, min2gramfreq2 );
 
         // all focus words (above freq threshold) with context ID2word[wid]
         // pw_hash->second is the second level hash
         int neighborCount = count_if( pw_hash.begin(), pw_hash.end(), 
-                                      [ min2gramfreq ]( const P& p2 ){ return p2.second > min2gramfreq; } );
+                                      [ min2gramfreq ]( const P& p2 ){ return p2.second >= min2gramfreq; } );
                                         
 		// some context words have all focus words filtered. ignore them, keep others
 		if( neighborCount > 0 ){
-		    wordIDs.push_back(wid);
+		    outputWordIDs.push_back(wid);
+		    // the hash value is the rank by unigram frequency, in the same order as the output bigram context word
+		    // +1 to start from 1. To differentiate from 0 ("not included in output")
+		    wordID2outputRank[wid] = wordCount + 1;
 		    wordCount++;
+		    allKeptUnigramOccur += iter->second;
 		}
 	}
 
@@ -1008,13 +1031,14 @@ void outputTopBigrams_(const char* topbigramFilename)
     fprintf( OUTF, "Words:\n" );
 
     i = 0;
-	for( auto iter = wordIDs.begin(); iter != wordIDs.end(); ++iter ){
+    // outputWordIDs contain all words to write in "Unigrams" area and all context words in "Bigrams" area
+	for( auto iter = outputWordIDs.begin(); iter != outputWordIDs.end(); ++iter ){
 	    i++;
 	    int wid = *iter;
 	    string& w = ID2word[wid];
 	    // the unigram probability is defined as the fraction of bigrams
 	    // whose second word is w, in all bigrams
-	    fprintf( OUTF, "%s,%d,%.3f", w.c_str(), unigram2freq[wid], log( unigram2freq[wid] / allBigramOccur ) );
+	    fprintf( OUTF, "%s,%d,%.3f", w.c_str(), unigram2freq[wid], log( unigram2freq[wid] / allKeptUnigramOccur ) );
 
 	    if( i < wordCount ){
 	        if( i % 10 == 0 )
@@ -1029,7 +1053,7 @@ void outputTopBigrams_(const char* topbigramFilename)
 	int bigramCount = 0;
 	double allKeptBigramOccurrences = 0;
 
-	printf( "Saving bigrams of %d focus words into '%s'...\n", wordCount, topbigramFilename );
+	printf( "Saving bigrams of %d words into '%s'...\n", wordCount, topbigramFilename );
 
     vector<P> wIDfreqs2;
     // reserve the maximum number of words
@@ -1037,7 +1061,7 @@ void outputTopBigrams_(const char* topbigramFilename)
 
 	int wc = 0;
     
-	for( auto iter = wordIDs.begin(); iter != wordIDs.end(); ++iter ){
+	for( auto iter = outputWordIDs.begin(); iter != outputWordIDs.end(); ++iter ){
 	    int wid = *iter;
 	    string& w = ID2word[wid];
 		int min2gramfreq2 = int( opt.min2gramprob * unigram2freq[wid] );
@@ -1046,14 +1070,23 @@ void outputTopBigrams_(const char* topbigramFilename)
         wIDfreqs2.clear();
         
         for( auto iter = bigram2freq[wid].begin(); iter != bigram2freq[wid].end(); ++iter ){
-            if( iter->second >= min2gramfreq )
+            if( wordID2outputRank[ iter->first ] > 0 && iter->second >= min2gramfreq )
                 wIDfreqs2.push_back( P(iter->first, iter->second) );
         }
-                
-        sort( wIDfreqs2.begin(), wIDfreqs2.end(), [](const P& p1, const P& p2) { return ( p1.second > p2.second ); } );
         
-		// neighbor words are words preceding w, not following w
-		
+        // all neighbors of w are below output unigram frequency threshold $min1gramfreq
+        // this is unlikely if min1gramfreq is big enough, say 100
+        if( wIDfreqs2.size() == 0 )
+            continue;
+        
+        // sort neighbors by their output order / unigram freq
+        sort( wIDfreqs2.begin(), wIDfreqs2.end(), 
+                [ &wordID2outputRank ](const P& p1, const P& p2) 
+                {  return ( wordID2outputRank[ p1.first ] < wordID2outputRank[ p2.first ] ); } 
+            );
+        
+		// neighbor words are words following w, not preceding w
+		// neighbor words are focus words, w is the context word
 		double neighborTotalOccur = 0;
 		
 		for( auto iter = wIDfreqs2.begin(); iter != wIDfreqs2.end(); ++iter )
