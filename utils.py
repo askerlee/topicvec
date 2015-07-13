@@ -524,6 +524,8 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     do_smoothing=True
     timer1 = Timer( "loadBigramFileInBlock()" )
 
+    #pdb.set_trace()
+    
     try:
         header = BIGRAM.readline()
         lineno += 1
@@ -794,7 +796,8 @@ def loadExtraWordFile(filename):
     return extraWords
 
 # borrowed from Omer Levy's code
-def loadSimTestset(path):
+# extraArgs is not used, only for API conformity
+def loadSimTestset(path, extraArgs=None):
     testset = []
     print "Read sim testset " + path
     with open(path) as f:
@@ -803,23 +806,32 @@ def loadSimTestset(path):
             testset.append( [ x, y, float(sim) ] )
     return testset
 
-def loadAnaTestset(path):
+def loadAnaTestset(path, extraArgs=None):
     testset = []
     print "Read analogy testset " + path
-    possessive = 0
+    
+    if extraArgs is not None and 'skipPossessive' in extraArgs:
+        skipPossessive = True
+        possessive = 0
+    else:
+        skipPossessive = False
+           
     with open(path) as f:
         for line in f:
             # skip possessive forms
-            if line.find("'") >= 0:
+            if skipPossessive and line.find("'") >= 0:
                 possessive += 1
                 continue
             a, a2, b, b2 = line.strip().lower().split()
             testset.append( [ a, a2, b, b2 ] )
     
-    print "%d possessive pairs skipped" %possessive
+    if skipPossessive:
+        print "%d possessive pairs skipped" %possessive
+        
     return testset
 
-def loadTestsets(loader, testsetDir, testsetNames):
+# available loaders: loadSimTestset, loadAnaTestset
+def loadTestsets(loader, testsetDir, testsetNames, extraArgs=None):
     # always use unix style path
     testsetDir = testsetDir.replace("\\", "/")
     if testsetDir[-1] != '/':
@@ -838,7 +850,7 @@ def loadTestsets(loader, testsetDir, testsetNames):
         testsetNames = map( lambda x: os.path.basename(x)[:-4], testsetNames )
 
     for testsetName in testsetNames:
-        testset = loader( testsetDir + testsetName + ".txt" )
+        testset = loader( testsetDir + testsetName + ".txt", extraArgs )
         testsets.append(testset)
 
     return testsets
