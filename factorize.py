@@ -477,7 +477,7 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
     else:
         return RawCounts
 
-def block_factorize( G, F, N0, core_size, vocab_size, do_weight_cutoff, MAXITERS, testenv=None, test_block=False, save_residuals=False ):
+def block_factorize( G, F, N0, core_size, vocab, do_weight_cutoff, MAXITERS, testenv=None, test_block=False, save_residuals=False ):
     # new G1, G21, F1, F21 before
     # G11, G12 are views of G1
     # F11, F12 are views of F1
@@ -486,7 +486,8 @@ def block_factorize( G, F, N0, core_size, vocab_size, do_weight_cutoff, MAXITERS
     F11, F12, F21 = F[0:3]
 
     noncore_size = len(G21)
-
+    vocab_size = len(vocab)
+    
     # Weight normalization is in place. F11 couldn't be released prior to Weight11
     Weight11 = normalizeWeight( [ F11 ], do_weight_cutoff)
     
@@ -672,8 +673,8 @@ def main():
         testenv['word2dim_all'] = word2dim_all
         testenv['word2dim_core'] = word2dim_core
         
-        # block_factorize( G, F, N0, core_size, vocab_size, do_weight_cutoff, MAXITERS, testenv=None, test_block=False, save_residuals=False ):
-        block_factorize( G, F, N0, core_size, vocab_size, True, MAX_CORE_EM_ITERS, testenv, test_block )
+        # block_factorize( G, F, N0, core_size, vocab, do_weight_cutoff, MAXITERS, testenv=None, test_block=False, save_residuals=False ):
+        block_factorize( G, F, N0, core_size, vocab, True, MAX_CORE_EM_ITERS, testenv, test_block )
 
     else:
         extraWords = {}
