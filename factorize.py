@@ -477,7 +477,7 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
     else:
         return RawCounts
 
-def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None, test_block=False, save_residuals=False ):
+def block_factorize( G, F, N0, core_size, vocab_size, do_weight_cutoff, MAXITERS, testenv=None, test_block=False, save_residuals=False ):
     # new G1, G21, F1, F21 before
     # G11, G12 are views of G1
     # F11, F12 are views of F1
@@ -555,6 +555,8 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
     V = np.concatenate( (V11, V21) )
     logger.debug( "del V11, V21" )
     del V11, V21
+
+    save_embeddings( "%d-%d-%s.vec" %(vocab_size, N0, "BLKEM"), vocab, V, "V" )
     
     if test_block:
         print "Test EM on the complete matrix\n"
@@ -569,13 +571,10 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
         
     if testenv:
         print "Test embeddings derived from block factorization\n"
+        # An array of vocab_size * vocab_size is created here. Watch the amount of memory
         model = VecModel( V, testenv['vocab'], testenv['word2dim_all'], vecNormalize=True )
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
-
-    vocab_size = len(vocab)
-
-    save_embeddings( "%d-%d-%s.vec" %(vocab_size, N0, "BLKEM"), vocab, V, "V" )
     
     if save_residuals:
         VV = np.dot( V, V.T )
@@ -638,6 +637,7 @@ def main():
                 do_UniWeight = True
             if opt == '-E':
                 MAX_EM_ITERS = int(arg)
+                MAX_CORE_EM_ITERS = int(arg)
             if opt == '-F':
                 MAX_FW_ITERS = int(arg)
             if opt == '-b':
@@ -667,12 +667,13 @@ def main():
             sys.exit(2)
 
         vocab, word2dim_all, word2dim_core, G, F, u = loadBigramFileInBlock( bigram_filename, core_size, vocab_size, kappa, test_block )
+        vocab_size = len(vocab)
         testenv['vocab'] = vocab
         testenv['word2dim_all'] = word2dim_all
         testenv['word2dim_core'] = word2dim_core
         
-        # block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None )
-        block_factorize( G, F, N0, core_size, True, 5, vocab, testenv, test_block )
+        # block_factorize( G, F, N0, core_size, vocab_size, do_weight_cutoff, MAXITERS, testenv=None, test_block=False, save_residuals=False ):
+        block_factorize( G, F, N0, core_size, vocab_size, True, MAX_CORE_EM_ITERS, testenv, test_block )
 
     else:
         extraWords = {}

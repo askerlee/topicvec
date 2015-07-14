@@ -776,8 +776,8 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     BIGRAM.close()
 
     G11 = G1[ :, :core_size ]
-    F11 = F1[ :, :core_size ]
     G12 = G1[ :, core_size: ]
+    F11 = F1[ :, :core_size ]
     F12 = F1[ :, core_size: ]
     
     if test_alg:
