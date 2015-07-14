@@ -7,6 +7,8 @@ import pdb
 from utils import *
 import os
 import glob
+import logging
+logger = logging.getLogger("Mem")
 
 # factorization weighted by unigram probs
 # MAXITERS is not used. Only for API conformity
@@ -61,15 +63,15 @@ def uniwe_factorize(G, u, N0, MAXITERS=0, testenv=None):
     V = np.dot( (vs.T / Utrans).T, es_N_sqrt )
     VV = np.dot( V, V.T )
 
-    print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G - VV) )
-    print "Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight), norm1(G - VV, Weight) )
+    #print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G - VV) )
+    print "L1 Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight), norm1(G - VV, Weight) )
 
 #    if BigramWeight is not None:
 #        print "Freq Weighted:"
 #        print "VV: %.3f, G-VV: %.3f" %( norm1(VV, BigramWeight), norm1(G - VV, BigramWeight) )
 
     if testenv:
-        model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
+        model = VecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -122,8 +124,8 @@ def nowe_factorize(G, N):
     V = np.dot( vs, es_N_sqrt )
     VV = np.dot( V, V.T )
 
-    print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G - VV) )
-    print "No Weight Gsym: %.3f, Gsym-VV: %.3f" %( norm1(Gsym), norm1(Gsym - VV) )
+#    print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G - VV) )
+#    print "No Weight Gsym: %.3f, Gsym-VV: %.3f" %( norm1(Gsym), norm1(Gsym - VV) )
 
     timer.printElapseTime()
 
@@ -192,7 +194,7 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
         V = Vnew
 
         if testenv:
-            model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
+            model = VecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -239,7 +241,7 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
         #X = Xnew
 
         if testenv:
-            model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
+            model = VecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -379,7 +381,7 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
             V = vs.dot(E_sqrt)
 
             if testenv:
-                model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
+                model = VecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
                 evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
                 evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -416,7 +418,7 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
 #            print "Trunc max ratio: norm1 %.3f, normF %.3f" %( max(ratio1), max(ratioF) )
 
             if testenv:
-                model = vecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
+                model = VecModel( V, testenv['vocab'], testenv['word2dim'], vecNormalize=True )
                 evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
                 evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -468,64 +470,98 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
         # normalize to [0,1]
         Weight /= maxwe
 
+    print
+    
     if len(RawCounts) == 1:
         return RawCounts[0]
     else:
         return RawCounts
 
-def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None, test_block=False ):
+def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, testenv=None, test_block=False, save_residuals=False ):
+    # new G1, G21, F1, F21 before
+    # G11, G12 are views of G1
+    # F11, F12 are views of F1
     # core_size * core_size, core_size * noncore_size, noncore_size * core_size
     G11, G12, G21 = G[0:3]
     F11, F12, F21 = F[0:3]
 
     noncore_size = len(G21)
 
+    # Weight normalization is in place. F11 couldn't be released prior to Weight11
     Weight11 = normalizeWeight( [ F11 ], do_weight_cutoff)
+    
     testenv['word2dim'] = testenv['word2dim_core']
 
     # get embeddings of core words
+    # new V11, VV11 in we_factorize_EM()
     # core_size * N0, core_size * core_size
     V11, VV11 = we_factorize_EM( G11, Weight11, N0, MAXITERS, testenv )
-    print "Embeddings of %d core words have been solved" %core_size
-
+    print "\nEmbeddings of %d core words have been solved" %core_size
+    logger.debug( "del VV11" )
+    del VV11
+    
     Weight12, Weight21 = normalizeWeight( [ F12, F21 ], do_weight_cutoff, zero_diagonal=False)
-
-    # noncore_size * core_size
+    
+    # new WGsum: noncore_size * core_size
     WGsum = ( Weight12 * G12 ).T + ( Weight21 * G21 )
-    Wsum = Weight12.T + Weight21
-    Wsum[ np.isclose(Wsum,0) ] = 0.001
-    Gwmean = WGsum / Wsum
+    
+    logger.debug( "del G1, G21" )
+    del G11, G12, G21
+    # G1, G21 should be released
 
+    # Save memory, reuse Weight21
+    Weight21 += Weight12.T
+    Wsum = Weight21
+    Wsum[ np.isclose(Wsum,0) ] = 0.001
+    WGsum /= Wsum
+    Gwmean = WGsum
+    
+    # only Wsum(Weight21) and Gwmean are used later
+    # Weight11 = F11 here, but we have to delete both references
+    logger.debug( "del F1" )
+    del F11, Weight11, F12, Weight12
+    # F1 should be released
+    
     # embeddings of noncore words
-    # noncore_size * N0
+    # new V21: noncore_size * N0
     V21 = np.zeros( ( noncore_size, N0 ) )
 
     timer = Timer()
+    
+    print "Begin finding embeddings of non-core words"
     
     # Find each noncore word's embedding
     for i in xrange(noncore_size):
         # core_size
         wi = Wsum[i]
-        # core_size * core_size
-        diagwi = np.diag(wi)
-        # N0 * N0
-        VWV = np.dot( V11.T, diagwi ).dot(V11)
-        V21[i] = np.linalg.inv(VWV).dot( V11.T.dot(diagwi).dot(Gwmean[i]) )
+        # new VW: core_size * N0
+        VW = V11.T * wi
+        # new VWV: N0 * N0
+        VWV = VW.dot(V11)
+        V21[i] = np.linalg.inv(VWV).dot( VW.dot(Gwmean[i]) )
         if i > 0 and i % 100 == 0:
             print "\r%d / %d." %(i,noncore_size),
             print timer.getElapseTime(), "\r",
 
-    print
+    print 
 
+    # F21 = Weight21 = Wsum, should be released
+    # Gwmean = WGsum should be released
+    # VW should be released
+    # VWV is N0*N0, small, ignored
+    logger.debug( "del F21, WGsum, VW" )
+    del F21, Weight21, Wsum, Gwmean, WGsum, VW
+    
     V = np.concatenate( (V11, V21) )
+    logger.debug( "del V11, V21" )
+    del V11, V21
     
     if test_block:
         print "Test EM on the complete matrix\n"
         VV = np.dot( V, V.T )
         G0 = G[3]
         Weight0 = normalizeWeight( [ F[3] ], do_weight_cutoff )
-        print "No Weight V: %.3f, VV: %.3f, G-VV: %.3f" %( norm1(V), norm1(VV), norm1(G0 - VV) )
-        print "Uni Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight0), norm1(G0 - VV, Weight0) )
+        print "L1 Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight0), norm1(G0 - VV, Weight0) )
         
         testenv['word2dim'] = testenv['word2dim_all']
         we_factorize_EM( G0, Weight0, N0, MAXITERS, testenv )
@@ -533,15 +569,18 @@ def block_factorize( G, F, N0, core_size, do_weight_cutoff, MAXITERS, vocab, tes
         
     if testenv:
         print "Test embeddings derived from block factorization\n"
-        model = vecModel( V, testenv['vocab'], testenv['word2dim_all'], vecNormalize=True )
+        model = VecModel( V, testenv['vocab'], testenv['word2dim_all'], vecNormalize=True )
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
     vocab_size = len(vocab)
 
     save_embeddings( "%d-%d-%s.vec" %(vocab_size, N0, "BLKEM"), vocab, V, "V" )
-    #A = G - VV
-    #save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, "BLKEM"), vocab, A, "A" )
+    
+    if save_residuals:
+        VV = np.dot( V, V.T )
+        A = G - VV
+        save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, "BLKEM"), vocab, A, "A" )
     print
 
 def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv ):
@@ -556,6 +595,8 @@ def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv ):
     print
 
 def main():
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    
     kappa = 0.01
     # vector dimensionality
     N0 = 500
@@ -572,7 +613,7 @@ def main():
     MAX_EM_ITERS = 0
     MAX_FW_ITERS = 0
     # EM iters of the core words
-    MAX_CORE_EM_ITERS = 5
+    MAX_CORE_EM_ITERS = 4
     do_block_factorize = False
 
     try:

@@ -12,15 +12,29 @@ class Timer(object):
     def __init__(self, name=None):
         self.name = name
         self.tstart = time.time()
-
+        self.tlast = self.tstart
+        self.firstCall = True
+        
     def getElapseTime(self, isStr=True):
+        totalElapsed = time.time() - self.tstart
+        # elapsed time since last call
+        interElapsed = time.time() - self.tlast
+        self.tlast = time.time()
+        
+        firstCall = self.firstCall
+        self.firstCall = False
+        
         if isStr:
             if self.name:
-                return '%s elapsed: %.2f' % (self.name, time.time() - self.tstart)
+                if firstCall:
+                    return '%s elapsed: %.2f' % ( self.name, totalElapsed )
+                return '%s elapsed: %.2f/%.2f' % ( self.name, totalElapsed, interElapsed )
             else:
-                return 'Elapsed: %.2f' % (time.time() - self.tstart)
+                if firstCall:
+                    return 'Elapsed: %.2f' % ( totalElapsed )
+                return 'Elapsed: %.2f/%.2f' % ( totalElapsed, interElapsed )
         else:
-            return time.time() - self.tstart
+            return totalElapsed, interElapsed
                         
     def printElapseTime(self):
         print self.getElapseTime()
@@ -762,8 +776,8 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     BIGRAM.close()
 
     G11 = G1[ :, :core_size ]
-    G12 = G1[ :, core_size: ]
     F11 = F1[ :, :core_size ]
+    G12 = G1[ :, core_size: ]
     F12 = F1[ :, core_size: ]
     
     if test_alg:
@@ -1059,7 +1073,7 @@ def bench(func, N, topEigenNum=0):
     print "Elapsed time is %.3f" %diff
     return diff
 
-class vecModel:
+class VecModel:
     def __init__(self, V, vocab, word2dim, vecNormalize=True):
         self.Vorig = V
         self.V = np.array([ x/normF(x) for x in self.Vorig ])

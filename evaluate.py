@@ -132,7 +132,7 @@ if unigramFilename:
     print "totally %d words, %d words in E[v]. |E[v]|: %.3f/%.3f, E[|v|]: %.3f/%.3f" %( totalWords, expWords, 
                                                                 norm1(expVec), normF(expVec), expVecNorm1, expVecNorm2 )
     
-model = vecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
+model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
 model.precompute_cosine()
 
 simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)
