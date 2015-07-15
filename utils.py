@@ -154,14 +154,15 @@ def save_embeddings( filename, vocab, V, matrixName ):
 
     FMAT.close()
 
-# for computational convenience, each row is an embedding vector
-def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.float32 ):
+# load top maxWordCount words, plus extraWords
+def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
     FMAT = open(filename)
     print "Load embedding text file '%s'" %(filename)
     V = []
     word2dim = {}
     vocab = []
-
+    precision = np.float32
+    
     try:
         header = FMAT.readline()
         lineno = 1
@@ -177,7 +178,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
         else:
             maxWordCount = vocab_size
 
-        print "%d extra words" %(len(extraWords))
+        print "Will load %d extra words" %(len(extraWords))
 
         # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
@@ -203,6 +204,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
                 
             if orig_wid >= maxWordCount and len(extraWords) == 0:
+                wid += 1
                 break
             if orig_wid >= maxWordCount and w not in extraWords:
                 continue
@@ -223,7 +225,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
         exit(2)
 
     FMAT.close()
-    print "%d embeddings read, %d kept" %(orig_wid, wid)
+    print "\n%d embeddings read, %d kept" %(orig_wid, wid)
 
     if wid < len(V):
         V = V[0:wid]
@@ -232,13 +234,15 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, precision=np.floa
     return V, vocab, word2dim
 
 # borrowed from gensim.models.word2vec
-def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.float32 ):
+# load top maxWordCount words, plus extraWords
+def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
     print "Load embedding binary file '%s'" %(filename)
     word2dim = {}
     vocab = []
     #origWord2dim = {}
     #origVocab = []
-
+    precision = np.float32
+    
     with open(filename, "rb") as fin:
         header = fin.readline()
         vocab_size, N = map(int, header.split())
@@ -248,7 +252,7 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
         else:
             maxWordCount = vocab_size
 
-        print "max %d words, %d extra words" %( maxWordCount, len(extraWords) )
+        print "Will load top %d words, plus %d extra words" %( maxWordCount, len(extraWords) )
         # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
         V = np.zeros( (maxWordCount + len(extraWords), N), dtype=precision )
@@ -283,9 +287,11 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
             if orig_wid >= vocab_size:
+                wid += 1
                 break
 
             if orig_wid >= maxWordCount and len(extraWords) == 0:
+                wid += 1
                 break
 
             if orig_wid >= maxWordCount and word not in extraWords:
@@ -301,7 +307,7 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, precision=np.
 
     if wid < len(V):
         V = V[0:wid]
-    print "%d embeddings read, %d embeddings kept" %(orig_wid, wid)
+    print "\n%d embeddings read, %d embeddings kept" %(orig_wid, wid)
     
     # V: embeddings, vocab: array of words, word2dim: dict of word to index in V        
     return V, vocab, word2dim
@@ -788,16 +794,17 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
 def loadUnigramFile(filename):
     UNI = open(filename)
     vocab_dict = {}
-    i = 1
+    wid = 1
     for line in UNI:
         line = line.strip()
         if line[0] == '#':
             continue
         fields = line.split("\t")
                              # id, freq, log prob
-        vocab_dict[ fields[0] ] = ( i, int(fields[1]), np.exp(float(fields[2])) )
-        i += 1
+        vocab_dict[ fields[0] ] = ( wid, int(fields[1]), np.exp(float(fields[2])) )
+        wid += 1
 
+    print "%d words loaded from unigram file %s" %(wid, filename)
     return vocab_dict
 
 def loadExtraWordFile(filename):
@@ -807,6 +814,7 @@ def loadExtraWordFile(filename):
             w, wid = line.strip().split('\t')
             extraWords[w] = 1
 
+    print "%d words loaded from extra word file %s" %( len(extraWords), filename)
     return extraWords
 
 # borrowed from Omer Levy's code
@@ -937,7 +945,8 @@ def predict_ana( model, a, a2, b, realb2 ):
 
 # vocab_dict is a vocabulary dict, usually bigger than model.vocab, loaded from a unigram file
 # its purpose is to find absent words in the model
-def evaluate_sim(model, testsets, testsetNames, getAbsentWords=False, vocab_dict=None, cutPoint=0 ):
+def evaluate_sim(model, testsets, testsetNames, getAbsentWords=False, vocab_dict=None, cutPoint=-1 ):
+    # words in absentModelID2Word and words in absentVocabWords don't overlap
 
     # words in the vocab but not in the model
     absentModelID2Word = {}
@@ -986,7 +995,7 @@ def evaluate_sim(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
 
 # vocab_dict is a vocabulary dict, usually bigger than model.vocab, loaded from a unigram file
 # its purpose is to find absent words in the model
-def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict=None, cutPoint=0 ):
+def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict=None, cutPoint=-1 ):
     # for words in the vocab but not in the model. mapping from words to IDs
     absentModelID2Word = {}
     # words not in the vocab (of coz not in the model)
@@ -1102,7 +1111,7 @@ class VecModel:
             return self.Vorig[ self.word2dim[w] ]
 
     def precompute_cosine(self):
-        print "Precompute cosine matrix...",
+        print "Precompute cosine matrix, will need %.1f GB RAM..." %( len(self.V) * len(self.V) * 4.0 / 1000000000 ),
         self.cosTable = np.dot( self.V, self.V.T )
         print "Done."
 
