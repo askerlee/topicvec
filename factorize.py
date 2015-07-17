@@ -597,7 +597,7 @@ def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv ):
 def main():
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     
-    kappa = 0.01
+    kappa = 0.02
     # vector dimensionality
     N0 = 500
     # default -1 means to read all words
