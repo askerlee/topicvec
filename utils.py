@@ -944,7 +944,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
                 noncore_readcount += 1
 
             if orig_wid % 200 == 0:
-                print "\r%d = %d core + %d noncore\r" %( orig_wid, core_readcount, noncore_readcount ),
+                print "\r%d (%d core, %d noncore)\r" %( orig_wid, core_readcount, noncore_readcount ),
             if not coreMsg_printed and core_readcount == core_size:
                 print "\n%d core words are all read." %(core_size)
                 coreMsg_printed = True
