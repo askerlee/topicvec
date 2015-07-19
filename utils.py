@@ -182,7 +182,11 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
         else:
             maxWordCount = vocab_size
 
-        print "Will load %d extra words" %(len(extraWords))
+        print "Will load %d words" %maxWordCount,
+        if len(extraWords) > 0:
+            print "\b, plus %d extra words" %(len(extraWords))
+        else:
+            print
 
         # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
@@ -199,26 +203,25 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
                     raise ValueError( lineno, "%d words declared in header, but %d read" %(vocab_size, len(V)) )
                 break
 
-            orig_wid += 1
             fields = line.split(' ')
             fields = filter( lambda x: x, fields )
             w = fields[0]
 
+            V[wid] = np.array( [ float(x) for x in fields[1:] ], dtype=precision )
+            word2id[w] = wid
+            vocab.append(w)
+            if w in extraWords:
+                del extraWords[w]
+
+            orig_wid += 1
+            wid += 1
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
 
             if orig_wid >= maxWordCount and len(extraWords) == 0:
-                wid += 1
                 break
             if orig_wid >= maxWordCount and w not in extraWords:
                 continue
-
-            V[wid] = np.array( [ float(x) for x in fields[1:] ], dtype=precision )
-            word2id[w] = wid
-            vocab.append(w)
-            wid += 1
-            if w in extraWords:
-                del extraWords[w]
 
     except ValueError, e:
         if len( e.args ) == 2:
@@ -231,6 +234,8 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
     FMAT.close()
     print "\n%d embeddings read, %d kept" %(orig_wid, wid)
 
+    #pdb.set_trace()
+    
     if wid < len(V):
         V = V[:wid]
 
@@ -256,7 +261,12 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
         else:
             maxWordCount = vocab_size
 
-        print "Will load top %d words, plus %d extra words" %( maxWordCount, len(extraWords) )
+        print "Will load %d words" %maxWordCount,
+        if len(extraWords) > 0:
+            print "\b, plus %d extra words" %(len(extraWords))
+        else:
+            print
+
         # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
         V = np.zeros( (maxWordCount + len(extraWords), N), dtype=precision )
@@ -287,17 +297,6 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
             #origWord2id[word] = orig_wid
             #origVocab.append(word)
 
-            orig_wid += 1
-            if orig_wid % 1000 == 0:
-                print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
-            if orig_wid >= vocab_size:
-                wid += 1
-                break
-
-            if orig_wid >= maxWordCount and len(extraWords) == 0:
-                wid += 1
-                break
-
             if orig_wid >= maxWordCount and word not in extraWords:
                 fin.read(full_binvec_len)
                 continue
@@ -305,9 +304,19 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
             word2id[word] = wid
             vocab.append(word)
             V[wid] = np.fromstring( fin.read(full_binvec_len), dtype=precision )
-            wid += 1
             if word in extraWords:
                 del extraWords[word]
+
+            wid += 1
+            orig_wid += 1
+            if orig_wid % 1000 == 0:
+                print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
+            if orig_wid >= vocab_size:
+                break
+
+            if orig_wid >= maxWordCount and len(extraWords) == 0:
+                break
+
 
     if wid < len(V):
         V = V[:wid]
@@ -566,8 +575,9 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
     vocab_noncore = []
 
     word2id_all = {}
+    # origID is the original ID in this bigram file
+    # preID is the ID in the pretrained vec file
     word2origID_all = {}
-    word2preID_core = {}
     word2id_noncore = {}
     word2id_core = {}
 

@@ -721,18 +721,18 @@ def main():
             else:
                 print "Embeddings of all words in '%s' will be loaded as core words" %(vec_file)
 
-            V1, vocab_core, word2id_core = load_embeddings(vec_file, core_size)
+            V1, vocab_core, word2preID_core = load_embeddings(vec_file, core_size)
             # recompute core_size. If there are less than core_size words in vec_file, then the actual core_size is smaller
             core_size = len(vocab_core)
 
             if noncore_size > 0:
-                print "Blocks of %d noncore words and %d core words will be loaded" %( noncore_size, core_size )
+                print "2 blocks of %d noncore words and %d core words will be loaded" %( noncore_size, core_size )
             else:
-                print "Blocks of all noncore words and %d core words will be loaded" %(core_size)
+                print "2 blocks of %d core words and all noncore words will be loaded" %(core_size)
 
             vocab, word2id_all, word2id_core, coreword_preIDs, G, F, u = \
                                                         loadBigramFileInBlock( bigram_filename, core_size,
-                                                            noncore_size, word2id_core, kappa )
+                                                            noncore_size, word2preID_core, kappa )
 
             # select corresponding rows (word order might change)
             V1 = V1[coreword_preIDs]
