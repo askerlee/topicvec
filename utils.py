@@ -7,6 +7,10 @@ import pdb
 import sys
 import os
 import glob
+import logging
+
+memLogger = logging.getLogger("Mem")
+logging.basicConfig( stream=sys.stdout, level=logging.DEBUG )
 
 class Timer(object):
     def __init__(self, name=None):
@@ -14,16 +18,16 @@ class Timer(object):
         self.tstart = time.time()
         self.tlast = self.tstart
         self.firstCall = True
-        
+
     def getElapseTime(self, isStr=True):
         totalElapsed = time.time() - self.tstart
         # elapsed time since last call
         interElapsed = time.time() - self.tlast
         self.tlast = time.time()
-        
+
         firstCall = self.firstCall
         self.firstCall = False
-        
+
         if isStr:
             if self.name:
                 if firstCall:
@@ -35,10 +39,10 @@ class Timer(object):
                 return 'Elapsed: %.2f/%.2f' % ( totalElapsed, interElapsed )
         else:
             return totalElapsed, interElapsed
-                        
+
     def printElapseTime(self):
         print self.getElapseTime()
-           
+
 # Weight: nonnegative real matrix. If not specified, return the unweighted norm
 def norm1(M, Weight=None):
     if Weight is not None:
@@ -159,10 +163,10 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
     FMAT = open(filename)
     print "Load embedding text file '%s'" %(filename)
     V = []
-    word2dim = {}
+    word2id = {}
     vocab = []
     precision = np.float32
-    
+
     try:
         header = FMAT.readline()
         lineno = 1
@@ -185,7 +189,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
         V = np.zeros( (maxWordCount + len(extraWords), N), dtype=precision )
         wid = 0
         orig_wid = 0
-        
+
         for line in FMAT:
             lineno += 1
             line = line.strip()
@@ -202,7 +206,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
 
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    \r" %( orig_wid, len(extraWords) ),
-                
+
             if orig_wid >= maxWordCount and len(extraWords) == 0:
                 wid += 1
                 break
@@ -210,7 +214,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
                 continue
 
             V[wid] = np.array( [ float(x) for x in fields[1:] ], dtype=precision )
-            word2dim[w] = wid
+            word2id[w] = wid
             vocab.append(w)
             wid += 1
             if w in extraWords:
@@ -228,21 +232,21 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
     print "\n%d embeddings read, %d kept" %(orig_wid, wid)
 
     if wid < len(V):
-        V = V[0:wid]
-    
-    # V: embeddings, vocab: array of words, word2dim: dict of word to index in V        
-    return V, vocab, word2dim
+        V = V[:wid]
+
+    # V: embeddings, vocab: array of words, word2id: dict of word to index in V
+    return V, vocab, word2id
 
 # borrowed from gensim.models.word2vec
 # load top maxWordCount words, plus extraWords
 def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
     print "Load embedding binary file '%s'" %(filename)
-    word2dim = {}
+    word2id = {}
     vocab = []
-    #origWord2dim = {}
+    #origWord2id = {}
     #origVocab = []
     precision = np.float32
-    
+
     with open(filename, "rb") as fin:
         header = fin.readline()
         vocab_size, N = map(int, header.split())
@@ -277,10 +281,10 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
                 word2 = word.lower()
                 # if the lowercased word hasn't been read, treat the embedding as the lowercased word's
                 # otherwise, add the capitalized word to V
-                if word2 not in word2dim:
+                if word2 not in word2id:
                     word = word2
 
-            #origWord2dim[word] = orig_wid
+            #origWord2id[word] = orig_wid
             #origVocab.append(word)
 
             orig_wid += 1
@@ -298,7 +302,7 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
                 fin.read(full_binvec_len)
                 continue
 
-            word2dim[word] = wid
+            word2id[word] = wid
             vocab.append(word)
             V[wid] = np.fromstring( fin.read(full_binvec_len), dtype=precision )
             wid += 1
@@ -306,24 +310,25 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
                 del extraWords[word]
 
     if wid < len(V):
-        V = V[0:wid]
+        V = V[:wid]
     print "\n%d embeddings read, %d embeddings kept" %(orig_wid, wid)
-    
-    # V: embeddings, vocab: array of words, word2dim: dict of word to index in V        
-    return V, vocab, word2dim
 
-def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
+    # V: embeddings, vocab: array of words, word2id: dict of word to index in V
+    return V, vocab, word2id
+
+def loadBigramFile( bigram_filename, topWordNum, extraWords, kappa=0.01 ):
     print "Loading bigram file '%s':" %bigram_filename
     BIGRAM = open(bigram_filename)
     lineno = 0
     vocab = []
-    word2dim = {}
+    word2id = {}
     # 1: headers, 2: bigrams. for error msg printing
     stage = 1
-    # must be True. Otherwise some entries in logb_j will be log of 0
-    # After smoothing, entries in b_j are always positive, thus logb_j is fine
-    # To reduce code modifications, this flag is not removed
-    do_smoothing=True
+    # In order to disable smoothing, just set kappa to 0.
+    # But when smoothing is disabled, some entries in logb_i will be log of 0
+    # After smoothing, entries in b_i are always positive, thus logb_i is fine
+    # do_smoothing=True
+
     timer1 = Timer( "loadBigramFile()" )
 
     try:
@@ -359,7 +364,7 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
 
         i = 0
         wc = 0
-        # Read the word list, build the word2dim mapping
+        # Read the word list, build the word2id mapping
         # Keep first topWordNum words and words in extraWords, if any
         while True:
             header = BIGRAM.readline()
@@ -374,7 +379,7 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
             for word in words:
                 w, freq, log_ui = word.split(",")
                 if i < topWordNum or w in extraWords:
-                    word2dim[w] = i
+                    word2id[w] = i
                     log_u.append(float(log_ui))
                     vocab.append(w)
                     i += 1
@@ -411,8 +416,10 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
 
         line = BIGRAM.readline()
         lineno += 1
-        wid = 0
+        contextWID = 0
 
+        pdb.set_trace()
+        
         while True:
             line = line.strip()
             # end of file
@@ -420,29 +427,31 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
                 break
 
             # If we have read the bigrams of all the wanted words
-            if wid == vocab_size:
+            if contextWID == vocab_size:
                 # if some words in extraWords are not read, there is bug
                 break
 
-            orig_wid, w, neighborCount, freq, cutoffFreq = line.split(",")
+            # word ID, word, number of distinct neighbors, sum of freqs of all neighbors, cut off freq
+            orig_wid, w, neighborCount, neighborTotalOccur, cutoffFreq = line.split(",")
             orig_wid = int(orig_wid)
-
+            neighborTotalOccur = float(neighborTotalOccur)
+            
             if orig_wid % 500 == 0:
                 print "\r%d\r" %orig_wid,
 
             if orig_wid <= topWordNum or w in extraWords:
-                readNeighbors = True
+                recordCurrWord = True
                 # remove it from the extra list, as a double-check measure
                 # when all wanted words are read, the extra list should be empty
                 if w in extraWords:
                     del extraWords[w]
             else:
-                readNeighbors = False
+                recordCurrWord = False
 
             # x_{.j}
-            x_j = np.zeros(vocab_size, dtype=np.float32)
+            x_i = np.zeros(vocab_size, dtype=np.float32)
             skipRemainingNeighbors = False
-            
+
             while True:
                 line = BIGRAM.readline()
                 lineno += 1
@@ -462,51 +471,44 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
                     break
 
                 # if the current context word is not wanted, skip these lines
-                if not readNeighbors or skipRemainingNeighbors:
+                if not recordCurrWord or skipRemainingNeighbors:
                     continue
 
                 line = line.strip()
                 neighbors = line.split("\t")
                 for neighbor in neighbors:
                     w2, freq2, log_bij = neighbor.split(",")
-                    if w2 in word2dim:
-                        i = word2dim[w2]
-                        x_j[i] = int(freq2)
+                    if w2 in word2id:
+                        i = word2id[w2]
+                        x_i[i] = int(freq2)
                     # when meeting the first focus word not in vocab, all following focus words are not in vocab
                     # since neighbors are sorted ascendingly by ID
                     # So they are skipped to speed up reading
                     else:
                         skipRemainingNeighbors = True
                         break
-                        
-            # B stores original probs
-            #B.append( x_j / np.sum(x_j) )
 
-            # only push to F & G when this word is wanted
-            if readNeighbors:
-                # append a copy of x_j by * 1
-                # otherwise only append a pointer. The contents may be changed accidentally elsewhere
-                # the freqs are transformed and used as weights
+            # only save in F & G when this word is wanted
+            if recordCurrWord:
+                # Question: whether set F to the original freq or smoothed freq (assign F before or after smoothing)?
+                F[contextWID] = x_i
 
-                # smoothing using ( total freq of w )^0.7
-                if do_smoothing:
-                    x_j_norm1 = norm1(x_j)
-                    utrans = x_j_norm1 * k_u
-                    x_j += utrans
-                    #x_j_norm2 = norm1(x_j)
-                    #smooth_norm = norm1(utrans)
-                    #if wid % 50 == 0:
-                    #    print "%d,%d: smoothing %.5f/%.5f. %d -> %d" %( orig_wid, wid+1, smooth_norm, smooth_norm/x_j_norm1,
-                    #                                                        x_j_norm1, x_j_norm2 )
+                """
+                x_i_norm1 = np.sum(x_i)
+                utrans = x_i_norm1 * k_u
+                x_i = x_i * (1 - kappa) + utrans
 
-                F[wid] = x_j
-
-                # normalization
-                b_j = x_j / np.sum(x_j)
-
-                logb_j = np.log(b_j)
-                G[wid] = logb_j - log_u
-                wid += 1
+                # the smoothing shoudn't change the norm1 of x_i
+                # i.e. x_i_norm1 = np.sum(x_i)
+                # After normalization, b_i = ( normalized x_i )*( 1 - kappa ) + u * kappa
+                b_i = x_i / np.sum(x_i)
+                """
+                
+                x_i /= neighborTotalOccur
+                b_i = x_i *( 1 - kappa ) + k_u
+                g_i = np.log(b_i) - log_u
+                G[contextWID] = g_i
+                contextWID += 1
 
     except ValueError, e:
         if len( e.args ) == 2:
@@ -523,29 +525,61 @@ def loadBigramFile(bigram_filename, topWordNum, extraWords, kappa=0.01):
     print
     BIGRAM.close()
 
-    return vocab, word2dim, G, F, u
+    return vocab, word2id, G, F, u
 
-# If core_size == -1, the core words are all demanded vocab words
-# If vocab_size == -1, the demanded vocab words are all words in the bigram file
-# If test_alg=True, load three blocks, as well as the whole matrix in G[3]&F[3]
-def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01, test_alg=False):
-    print "Loading bigram file '%s' into 3 blocks:" %bigram_filename
+# If noncore_size == -1, all noncore words are loaded into the upperright and lowerleft blocks
+# word2preID_core are the IDs of words in the pretrained embedding file
+# If vocab_core and word2preID_core are specified, core words are limited to words in them
+# Otherwise the top core_size words are core words
+def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2preID_core={}, kappa=0.02 ):
+
+    if len(word2preID_core) > 0:
+        corewords_specified = True
+        # recordUpperleft is always the negation of corewords_specified. But sometimes is semantically clearer
+        recordUpperleft = False
+        # this core_size is used in comparsion with the total word count in the header
+        # this size might be inaccurate, as some words in word2preID_core might be missing from this bigram file
+        core_size = len(word2preID_core)
+    else:
+        corewords_specified = False
+        recordUpperleft = True
+        # if core words are not specified, core_size should always > 0, 
+        # otherwise I don't know how many words are core words
+        if core_size < 0:
+            raise ValueError( "Argument error: core_size = %d < 0 when word2preID_core is not specified" %core_size )
+
+    # if corewords_specified, return a list of coreword IDs in the pretrained mapping
+    # otherwise, return empty list (just for return value conformity)
+    coreword_preIDs = []
+
+    if not recordUpperleft:
+        # do not record G11/F11
+        print "Loading bigram file '%s' into 2 blocks:" %bigram_filename
+    else:
+        print "Loading bigram file '%s' into 3 blocks:" %bigram_filename
+
     BIGRAM = open(bigram_filename)
+
     lineno = 0
     vocab = []
-    word2dim_all = {}
-    word2dim_core = {}
-    
-    # 1: headers, 2: bigrams. for error msg printing
+    vocab_core = []
+    vocab_noncore = []
+
+    word2id_all = {}
+    word2origID_all = {}
+    word2preID_core = {}
+    word2id_noncore = {}
+    word2id_core = {}
+
+    # stage 1: header and unigrams, stage 2: bigrams. for error msg printing
     stage = 1
-    # must be True. Otherwise some entries in logb_j will be log of 0
-    # After smoothing, entries in b_j are always positive, thus logb_j is fine
+    # do_smoothing must be True. Otherwise some entries in logb_i will be log of 0
+    # After smoothing, entries in b_i are always positive, thus logb_i is fine
     # To reduce code modifications, this flag is not removed
-    do_smoothing=True
     timer1 = Timer( "loadBigramFileInBlock()" )
 
     #pdb.set_trace()
-    
+
     try:
         header = BIGRAM.readline()
         lineno += 1
@@ -555,20 +589,24 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
 
         wholeVocabSize = int(match.group(1))
         print "Totally %d words"  %wholeVocabSize
-        
-        if vocab_size > wholeVocabSize:
-            raise ValueError( "%d words demanded, but only %d declared in header" %(vocab_size, wholeVocabSize) )
+
+        # at least consider one noncore word
+        min_vocab_size = core_size + max( noncore_size, 1 )
+        if min_vocab_size > wholeVocabSize:
+            raise ValueError( "%d (%d + %d) words demanded, but only %d declared in header" %( min_vocab_size, core_size,
+                                                                                             max( noncore_size, 1 ), wholeVocabSize) )
         # all the words are included in the vocab
-        if vocab_size < 0:
-            vocab_size = wholeVocabSize
-                
-        # If core_size < 0, the core block is the whole matrix
-        # the returned upperright, lowerleft blocks will be empty
-        if core_size < 0:
-            core_size = vocab_size
-        elif core_size > vocab_size:
-            raise ValueError( "%d core words > %d total demanded words" %(core_size, vocab_size) )
-        
+        # in this case, vocab_size needs to be initialized
+        if not corewords_specified:
+            if noncore_size < 0:
+                vocab_size = wholeVocabSize
+                noncore_size = vocab_size - core_size
+            else:
+                # core_size will be updated later
+                # some core words in word2preID_core may not be present in this bigram file
+                vocab_size = core_size + noncore_size
+        # if corewords_specified, noncore_size & vocab_size will be computed later, needn't to be initialized
+
         # skip params
         header = BIGRAM.readline()
         header = BIGRAM.readline()
@@ -586,9 +624,15 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
 
         # vector log_u, log-probs of all unigrams (at most vocab_size unigrams)
         log_u0 = []
-
+        log_u0_core = []
+        log_u0_noncore = []
         wc = 0
-        # Read the focus list, build the word2dim_all / word2dim_core mapping
+        core_wc = 0
+        noncore_wc = 0
+        # maximum ID in the original order of core words
+        max_core_origID = 0
+
+        # Read the focus list, build the word2id_all / word2id_core mapping
         # Read all context words of the core_size words
         # Read top core_size context words of remaining words
         while True:
@@ -600,47 +644,92 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
             if not header:
                 break
 
-            if wc < vocab_size:
-                words = header.split("\t")
-                for word in words:
-                    w, freq, log_ui = word.split(",")
-                    word2dim_all[w] = wc
+            words = header.split("\t")
+            for word in words:
+                w, freq, log_ui = word.split(",")
+
+                # load core words only in word2preID_core, other words as noncore
+                # core words may not be consecutive, they may be interspersed by noncore words
+                # So put them into two sets of arrays
+                if corewords_specified:
+                    if w in word2preID_core:
+                        word2id_core[w] = core_wc
+                        core_wc += 1
+                        coreword_preIDs.append( word2preID_core[w] )
+                        log_u0_core.append(float(log_ui))
+                        vocab_core.append(w)
+
+                        if wc > max_core_origID:
+                            max_core_origID = wc
+
+                    elif noncore_size < 0 or noncore_wc < noncore_size :
+                        word2id_noncore[w] = noncore_wc
+                        noncore_wc += 1
+                        log_u0_noncore.append(float(log_ui))
+                        vocab_noncore.append(w)
+                    word2origID_all[w] = wc
+                    wc += 1
+
+                # load fresh core words
+                else:
+                    if wc == vocab_size:
+                        break
+
+                    word2id_all[w] = wc
                     if wc < core_size:
-                        word2dim_core[w] = wc
-                        
+                        word2id_core[w] = wc
+                    else:
+                        word2id_noncore[w] = wc - core_size
+
                     log_u0.append(float(log_ui))
                     vocab.append(w)
                     wc += 1
-                    if vocab_size == wc:
-                        break
-                    
-        # Usually these two should match, unless the bigram file is corrupted
-        if wc != vocab_size:
-            raise ValueError( "%d words demanded, but only %d read" %(vocab_size, wc) )
 
-        print "%d words in file, top %d to read into vocab, top %d are core" %( wholeVocabSize, vocab_size, core_size )
+        if corewords_specified:
+            # some core words may be missing from the bigram file. So recompute core_size
+            # If these two don't match, then some specified core words don't appear in the unigram list
+            if core_size != core_wc:
+                print "WARN: %d core words demanded, but only %d read" %(core_size, core_wc)
+                core_size = core_wc
 
+            noncore_size = noncore_wc
+            vocab_size = core_size + noncore_size
+            log_u0 = log_u0_core + log_u0_noncore
+            vocab = vocab_core + vocab_noncore
+
+            word2id_all = word2id_core
+            # insert noncore words into word2id_all
+            # core ID \in [ 0, coresize - 1 ]
+            # noncore ID \in [ core_size, ... ]
+            for w in word2id_noncore:
+                word2id_all[w] = word2id_noncore[w] + core_size
+
+        else:
+            # core words are consecutive. So orig ID = id
+            max_core_origID = core_size
+            word2origID_all = word2id_all
+            if vocab_size > 0 and wc < vocab_size:
+                print "WARN: %d words demanded, but only %d read" %(vocab_size, wc)
+                vocab_size = wc
+
+        print "%d words in file, top %d to read into vocab, %d core, %d noncore" %( wholeVocabSize,
+                                                                vocab_size, core_size, noncore_size )
+
+        # unigram prob & logprob of all the words
         log_u0 = np.array(log_u0)
         u0 = np.exp(log_u0)
-        # unigram prob & logprob of the top core_size words
-        u1 = u0[0:core_size]
-        u1 = u1 / np.sum(u1)
-        log_u1 = np.log(u1)
+        # re-normalization is needed, as some unigrams may be out of vocab
+        u0 /= np.sum(u0)
         
+        log_u0 = np.log(u0)
+        log_u_core    = log_u0[:core_size]
+        log_u_noncore = log_u0[core_size:]
+
         k_u0 = kappa * u0
-        k_u1 = kappa * u1
-        remainNum = vocab_size - core_size
-        # G1/F1: the upper block (later split into upperleft and upperright blocks)
-        # G21/F21: the lowerleft block
-        # the lower right block (biggest) G22/F22 is ignored
-        G1 = np.zeros( (core_size, vocab_size), dtype=np.float32 )
-        G21 = np.zeros( (remainNum, core_size), dtype=np.float32 )
-        F1 = np.zeros( (core_size, vocab_size), dtype=np.float32 )
-        F21 = np.zeros( (remainNum, core_size), dtype=np.float32 )
-        if test_alg:
-            G0 = np.zeros( (vocab_size, vocab_size), dtype=np.float32 )
-            F0 = np.zeros( (vocab_size, vocab_size), dtype=np.float32 )
-            
+        k_u_core    = k_u0[:core_size]
+        k_u_noncore = k_u0[core_size:]
+
+        ### Reading bigrams begins ###
         header = BIGRAM.readline()
         lineno += 1
 
@@ -652,19 +741,46 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
 
         line = BIGRAM.readline()
         lineno += 1
+
         contextWID = 0
+
+        # new G12, F12
+        # G12/F12: the upperright block
+        G12 = np.zeros( (core_size, noncore_size), dtype=np.float32 )
+        F12 = np.zeros( (core_size, noncore_size), dtype=np.float32 )
+        # new G21, F21
+        # G21/F21: the lowerleft block
+        # the lower right block (biggest) G22/F22 is ignored
+        G21 = np.zeros( (noncore_size, core_size), dtype=np.float32 )
+        F21 = np.zeros( (noncore_size, core_size), dtype=np.float32 )
+
+        # when reading core words, keep the upperleft block, the whole vocab
+        if recordUpperleft:
+            # new G11, F11
+            # G11/F11: the upperleft block
+            G11 = np.zeros( (core_size, core_size), dtype=np.float32 )
+            F11 = np.zeros( (core_size, core_size), dtype=np.float32 )
+            rowLength = vocab_size
+            k_u = k_u0
+            log_u = log_u0
+        # when reading core words, only keep the upperright block, noncore_size words
+        else:
+            rowLength = noncore_size
+            k_u = k_u_noncore
+            log_u = log_u_noncore
+
         # focusIDLimit: the limit of neighbor wid
         # Currently read all neighbors
         focusIDLimit = vocab_size
-        # wid offset of context words to store in F/G
-        contextIDOffset = 0
-        
-        G = G1
-        F = F1
-        k_u = k_u0
-        log_u = log_u0
-        
+            
+        # vars are initialized like those of a core word, 
+        # So pretend the previous nonexistent word is a core word
+        lastContextIsCore = True
+
         #pdb.set_trace()
+        core_readcount = 0
+        noncore_readcount = 0
+        coreMsg_printed = False
         
         while True:
             line = line.strip()
@@ -676,28 +792,54 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
             if contextWID == vocab_size:
                 break
 
-            orig_wid, w, neighborCount, freq, cutoffFreq = line.split(",")
+            # word ID, word, number of distinct neighbors, sum of freqs of all neighbors, cut off freq
+            orig_wid, w, neighborCount, neighborTotalOccur, cutoffFreq = line.split(",")
             orig_wid = int(orig_wid)
+            neighborTotalOccur = float(neighborTotalOccur)
 
-            if orig_wid % 300 == 0:
-                print "\r%d\r" %orig_wid,
+            if w in word2id_core:
+                # the current context word is a core word
+                contextIsCore = True
+                wid = word2id_core[w]
+                # context type switches from noncore to core, update relevant variables
+                # if context type doesn't change (last context is also core), then just keep vars unchanged
+                # context type switching should only happen very few times
+                if not lastContextIsCore:
+                    focusIDLimit = vocab_size
+                    
+                    if recordUpperleft:
+                        rowLength = vocab_size
+                        k_u = k_u0
+                        log_u = log_u0
+                    # when reading core words, only keep the upperright block, noncore_size words
+                    else:
+                        rowLength = noncore_size
+                        k_u = k_u_noncore
+                        log_u = log_u_noncore
 
-            if contextWID == core_size:
-                focusIDLimit = core_size
-                contextIDOffset = core_size
-                G = G21
-                F = F21
-                k_u = k_u1
-                log_u = log_u1
-                print "%d core words are all read. Read remaining %d words" %(core_size, remainNum)
-                
-            # x_{.j}
-            x_j = np.zeros(focusIDLimit, dtype=np.float32)
-            if test_alg:
-                x0_j = np.zeros(vocab_size, dtype=np.float32)
-            
+                    lastContextIsCore = True
+                    
+            else:
+                contextIsCore = False
+                wid = word2id_noncore[w]
+                # context type switches from core to noncore, update relevant variables
+                # if context type doesn't change (last context is also noncore), then just keep vars unchanged
+                # context type switching should only happen very few times
+                if lastContextIsCore:
+                    # in a row of noncore (context) word, only freqs of core (focus) words are recorded
+                    focusIDLimit = max_core_origID
+                    rowLength = core_size
+
+                    k_u = k_u_core
+                    log_u = log_u_core
+
+                    lastContextIsCore = False
+
+            # x_{i.}
+            x_i = np.zeros(rowLength, dtype=np.float32)
+
             skipRemainingNeighbors = False
-            
+
             while True:
                 line = BIGRAM.readline()
                 lineno += 1
@@ -706,65 +848,106 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
                 if not line:
                     break
 
-                # A comment. Just in case of future extension
-                # Currently only the last line in the file is a comment
+                # Encounter a comment. Just in case of future extension
+                # Currently only the last line in the file is a comment after the header
                 if line[0] == '#':
                     continue
 
-                # beginning of the next word. Continue at the outer loop
+                # Beginning of the next word. Continue at the outer loop
                 # Neighbor lines always start with '\t'
                 if line[0] != '\t':
                     break
 
                 if skipRemainingNeighbors:
                     continue
-                    
+
                 line = line.strip()
                 neighbors = line.split("\t")
+
                 for neighbor in neighbors:
                     w2, freq2, log_bij = neighbor.split(",")
 
-                    # when meeting the first focus word not in vocab, all following focus words are not in vocab
+                    # when meeting the first focus word out of vocab, all following focus words are not in vocab
                     # since neighbors are sorted ascendingly by ID
                     # So they are skipped to speed up reading
-                    if w2 not in word2dim_all:
+                    if w2 not in word2id_all:
                         skipRemainingNeighbors = True
                         break
 
-                    i = word2dim_all[w2]
+                    origID = word2origID_all[w2]
+                    # On a noncore row. Should have focus word orig ID <= max_core_origID
+                    # origIDs of core words may be interspersed by origIDs of noncore words
+                    # but IDs of core words are consecutive, and preceding IDs of noncore words
+                    if not contextIsCore and origID > max_core_origID:
+                        skipRemainingNeighbors = True
+                        break
+
                     freq2 = int(freq2)
-                    if i < focusIDLimit:
-                        x_j[i] = freq2
-                    if test_alg:
-                        x0_j[i] = freq2
-                    elif i >= focusIDLimit:
-                        skipRemainingNeighbors = True
-                        break
-                    
-            if do_smoothing:
-                x_j_norm1 = norm1(x_j)
-                utrans = x_j_norm1 * k_u
-                x_j += utrans
-                
-                if test_alg:
-                    x0_j_norm1 = norm1(x0_j)
-                    u0trans = x0_j_norm1 * k_u0
-                    x0_j += u0trans
-                    
-            F[ contextWID - contextIDOffset ] = x_j
+                    # On a core (context) row. 
+                    # If recordUpperleft, use the map from whole vocab to IDs;
+                    # otherwise use the map from core words to IDs
+                    if contextIsCore:
+                        if recordUpperleft:
+                            # w2id: id of w2
+                            w2id = word2id_all[w2]
+                            x_i[w2id] = freq2
+                        # don't keep upperleft block. core (focus) words are discarded
+                        # w2id \in [ 0, noncore_size - 1 ]
+                        elif w2 in word2id_noncore:
+                            w2id = word2id_noncore[w2]
+                            x_i[w2id] = freq2
+                    # On a noncore (context) row. Only record core (focus) words
+                    elif w2 in word2id_core:
+                        w2id = word2id_core[w2]
+                        x_i[w2id] = freq2
 
+            # Question: whether set F to the original freq or smoothed freq (assign F before or after smoothing)?
+            if contextIsCore:
+                if recordUpperleft:
+                    F11[core_readcount] = x_i[:core_size]
+                    F12[core_readcount] = x_i[core_size:]
+                else:
+                    # As w2id \in [ 0, noncore_size - 1 ], no offset is needed
+                    F12[core_readcount] = x_i
+            else:
+                F21[noncore_readcount] = x_i
+
+            """
+            x_i_norm1 = np.sum(x_i)
+            utrans = x_i_norm1 * k_u
+            x_i = x_i * (1 - kappa) + utrans
+
+            # the smoothing shoudn't change the norm1 of x_i
+            # i.e. x_i_norm1 = np.sum(x_i)
             # normalization
-            b_j = x_j / np.sum(x_j)
-            logb_j = np.log(b_j)
-            G[ contextWID - contextIDOffset ] = logb_j - log_u
+            b_i = x_i / np.sum(x_i)
+            """
             
-            if test_alg:
-                F0[contextWID] = x0_j
-                b0_j = x0_j / np.sum(x0_j)
-                logb0_j = np.log(b0_j)
-                G0[contextWID] = logb0_j - log_u0
-                
+            x_i /= neighborTotalOccur
+            b_i = x_i * ( 1 - kappa ) + k_u
+            g_i = np.log(b_i) - log_u
+
+            if contextIsCore:
+                if recordUpperleft:
+                    G11[core_readcount] = x_i[:core_size]
+                    G12[core_readcount] = x_i[core_size:]
+                else:
+                    # As w2id \in [ 0, noncore_size - 1 ], no offset is needed
+                    G12[core_readcount] = x_i
+            else:
+                G21[noncore_readcount] = x_i
+            
             contextWID += 1
+            if contextIsCore:
+                core_readcount += 1
+            else:
+                noncore_readcount += 1
+
+            if orig_wid % 200 == 0:
+                print "\r%d, %d, %d\r" %( orig_wid, core_readcount, noncore_readcount ),
+            if not coreMsg_printed and core_readcount == core_size:
+                print "\n%d core words are all read." %(core_size)
+                coreMsg_printed = True
                 
     except ValueError, e:
         if len( e.args ) == 2:
@@ -781,16 +964,15 @@ def loadBigramFileInBlock(bigram_filename, core_size, vocab_size=-1, kappa=0.01,
     print
     BIGRAM.close()
 
-    G11 = G1[ :, :core_size ]
-    G12 = G1[ :, core_size: ]
-    F11 = F1[ :, :core_size ]
-    F12 = F1[ :, core_size: ]
-    
-    if test_alg:
-        return vocab, word2dim_all, word2dim_core, [ G11, G12, G21, G0 ], [ F11, F12, F21, F0 ], u0
+    if recordUpperleft:
+        G = [ G11, G12, G21 ]
+        F = [ F11, F12, F21 ]
     else:
-        return vocab, word2dim_all, word2dim_core, [ G11, G12, G21 ], [ F11, F12, F21 ], u0
-        
+        G = [ G12, G21 ]
+        F = [ F12, F21 ]
+
+    return vocab, word2id_all, word2id_core, coreword_preIDs, G, F, u0
+
 def loadUnigramFile(filename):
     UNI = open(filename)
     vocab_dict = {}
@@ -831,13 +1013,13 @@ def loadSimTestset(path, extraArgs=None):
 def loadAnaTestset(path, extraArgs=None):
     testset = []
     print "Read analogy testset " + path
-    
+
     if extraArgs is not None and 'skipPossessive' in extraArgs:
         skipPossessive = True
         possessive = 0
     else:
         skipPossessive = False
-           
+
     with open(path) as f:
         for line in f:
             # skip possessive forms
@@ -846,10 +1028,10 @@ def loadAnaTestset(path, extraArgs=None):
                 continue
             a, a2, b, b2 = line.strip().lower().split()
             testset.append( [ a, a2, b, b2 ] )
-    
+
     if skipPossessive:
         print "%d possessive pairs skipped" %possessive
-        
+
     return testset
 
 # available loaders: loadSimTestset, loadAnaTestset
@@ -882,7 +1064,7 @@ def loadTestsets(loader, testsetDir, testsetNames, extraArgs=None):
 # model.similarity(x, y): return the cosine similarity between the embeddings of x and y
 # realb2 is passed in only for debugging purpose
 def predict_ana( model, a, a2, b, realb2 ):
-    questWordIndices = [ model.word2dim[x] for x in (a,a2,b) ]
+    questWordIndices = [ model.word2id[x] for x in (a,a2,b) ]
     # b2 is effectively iterating through the vocab. The row is all the cosine values
     b2a2 = model.sim_row(a2)
     b2a  = model.sim_row(a)
@@ -895,10 +1077,10 @@ def predict_ana( model, a, a2, b, realb2 ):
     b2add  = model.vocab[iadd]
 
     # For debugging purposes
-    ia = model.word2dim[a]
-    ia2 = model.word2dim[a2]
-    ib = model.word2dim[b]
-    ib2 = model.word2dim[realb2]
+    ia = model.word2id[a]
+    ia2 = model.word2id[a2]
+    ib = model.word2id[b]
+    ib2 = model.word2id[realb2]
     realaddsim = addsims[ib2]
 
     mulsims = ( b2a2 + 1 ) * ( b2b + 1 ) / ( b2a + 1.001 )
@@ -1005,7 +1187,7 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
     # a set of scores, in the same order as in testsets
     # each is a tuple (add_score, mul_score)
     anaScores = []
-    
+
     #pdb.set_trace()
 
     for i,testset in enumerate(testsets):
@@ -1016,7 +1198,7 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
         correct_mul = 0.0
         validPairNum = 0
         currentScores = np.array( [ 0.0, 0.0 ] )
-        
+
         for j,analogy in enumerate(testset):
 
             allWordsPresent = True
@@ -1062,7 +1244,7 @@ def evaluate_ana(model, testsets, testsetNames, getAbsentWords=False, vocab_dict
                 currentScores = np.array( [ correct_add, correct_mul ] ) / validPairNum
 
             if j % 500 == 499:
-                print "\r%i/%i/%i: Add %.5f, Mul %.5f\r" %( j + 1, validPairNum, len(testset), 
+                print "\r%i/%i/%i: Add %.5f, Mul %.5f\r" %( j + 1, validPairNum, len(testset),
                                                             currentScores[0], currentScores[1] ),
 
         print "\n%s: %d analogies, %d valid" %( testsetNames[i], len(testset), validPairNum ),
@@ -1083,32 +1265,32 @@ def bench(func, N, topEigenNum=0):
     return diff
 
 class VecModel:
-    def __init__(self, V, vocab, word2dim, vecNormalize=True):
+    def __init__(self, V, vocab, word2id, vecNormalize=True):
         self.Vorig = V
         self.V = np.array([ x/normF(x) for x in self.Vorig ])
-        self.word2dim = word2dim
+        self.word2id = word2id
         self.vecNormalize = vecNormalize
         self.vocab = vocab
         self.iterIndex = 0
         self.cosTable = None
 
     def __contains__(self, w):
-        return w in self.word2dim
+        return w in self.word2id
 
     def __getitem__(self, w):
         if w not in self:
             return None
         else:
             if self.vecNormalize:
-                return self.V[ self.word2dim[w] ]
+                return self.V[ self.word2id[w] ]
             else:
-                return self.Vorig[ self.word2dim[w] ]
+                return self.Vorig[ self.word2id[w] ]
 
     def orig(self, w):
         if w not in self:
             return None
         else:
-            return self.Vorig[ self.word2dim[w] ]
+            return self.Vorig[ self.word2id[w] ]
 
     def precompute_cosine(self):
         print "Precompute cosine matrix, will need %.1f GB RAM..." %( len(self.V) * len(self.V) * 4.0 / 1000000000 ),
@@ -1121,8 +1303,8 @@ class VecModel:
 
         if self.vecNormalize:
             if self.cosTable is not None:
-                ix = self.word2dim[x]
-                iy = self.word2dim[y]
+                ix = self.word2id[x]
+                iy = self.word2id[y]
                 return self.cosTable[ix,iy]
             return np.dot( self[x], self[y] )
 
@@ -1142,7 +1324,7 @@ class VecModel:
         if self.vecNormalize:
             if self.cosTable is None:
                 self.precompute_cosine()
-            ix = self.word2dim[x]
+            ix = self.word2id[x]
             return self.cosTable[ix]
 
         vx = self[x]

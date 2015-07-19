@@ -1097,6 +1097,7 @@ void outputTopBigrams_(const char* topbigramFilename)
 
 		int neighborCount = wIDfreqs2.size();
 
+        // word ID, word, number of distinct neighbors, sum of freqs of all neighbors, cut off freq
         fprintf( OUTF, "%d,%s,%d,%d,%d\n", wc, w.c_str(), neighborCount, (int)neighborTotalOccur, min2gramfreq );
 
         int i = 0;
@@ -1104,6 +1105,7 @@ void outputTopBigrams_(const char* topbigramFilename)
 			const P& wIDfreq2 = *iter;
 		    int wid2 = wIDfreq2.first;
 
+            // word,freq,log conditional_prob
             fprintf( OUTF, "\t%s,%d,%.3f", ID2word[wid2].c_str(), 
                             wIDfreq2.second, log( wIDfreq2.second / neighborTotalOccur ) );
 
