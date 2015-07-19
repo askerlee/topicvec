@@ -929,13 +929,13 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
 
             if contextIsCore:
                 if recordUpperleft:
-                    G11[core_readcount] = x_i[:core_size]
-                    G12[core_readcount] = x_i[core_size:]
+                    G11[core_readcount] = g_i[:core_size]
+                    G12[core_readcount] = g_i[core_size:]
                 else:
                     # As w2id \in [ 0, noncore_size - 1 ], no offset is needed
-                    G12[core_readcount] = x_i
+                    G12[core_readcount] = g_i
             else:
-                G21[noncore_readcount] = x_i
+                G21[noncore_readcount] = g_i
             
             contextWID += 1
             if contextIsCore:
@@ -944,7 +944,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
                 noncore_readcount += 1
 
             if orig_wid % 200 == 0:
-                print "\r%d, %d, %d\r" %( orig_wid, core_readcount, noncore_readcount ),
+                print "\r%d = %d core + %d noncore\r" %( orig_wid, core_readcount, noncore_readcount ),
             if not coreMsg_printed and core_readcount == core_size:
                 print "\n%d core words are all read." %(core_size)
                 coreMsg_printed = True

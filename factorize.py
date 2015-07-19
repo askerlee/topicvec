@@ -447,14 +447,14 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
 
     maxwe = 0
 
-    for Weight in RawCounts:
+    for i, Weight in enumerate(RawCounts):
         totalElemCount = Weight.shape[0] * Weight.shape[1]
 
         if do_weight_cutoff:
             cutEntryCount = np.sum( Weight > idealCutPoint )
             Weight[ Weight > idealCutPoint ] = idealCutPoint
-            print "%d (%.3f%%) elements in Weight cut off at %.2f" %( cutEntryCount,
-                                                            cutEntryCount * 100.0 / totalElemCount, idealCutPoint )
+            print "%d (%.3f%%) elements in Weight-%d cut off at %.2f" %( cutEntryCount,
+                                               cutEntryCount * 100.0 / totalElemCount, i+1, idealCutPoint )
 
         if zero_diagonal:
             for i in xrange( min(Weight.shape) ):
