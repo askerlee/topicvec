@@ -427,7 +427,7 @@ def loadBigramFile( bigram_filename, topWordNum, extraWords, kappa=0.01 ):
         lineno += 1
         contextWID = 0
 
-        pdb.set_trace()
+        #pdb.set_trace()
         
         while True:
             line = line.strip()
@@ -707,7 +707,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
             log_u0 = log_u0_core + log_u0_noncore
             vocab = vocab_core + vocab_noncore
 
-            word2id_all = word2id_core
+            word2id_all = word2id_core.copy()
             # insert noncore words into word2id_all
             # core ID \in [ 0, coresize - 1 ]
             # noncore ID \in [ core_size, ... ]
