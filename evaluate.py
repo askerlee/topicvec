@@ -109,9 +109,9 @@ if loadwordCutPoint > 0:
     print "Load top %d words" %(loadwordCutPoint)
 
 if isModelBinary:
-    V, vocab2, word2dim = load_embeddings_bin( modelFile, loadwordCutPoint, extraWords )
+    V, vocab2, word2dim, skippedWords = load_embeddings_bin( modelFile, loadwordCutPoint, extraWords )
 else:
-    V, vocab2, word2dim =     load_embeddings( modelFile, loadwordCutPoint, extraWords )
+    V, vocab2, word2dim, skippedWords =     load_embeddings( modelFile, loadwordCutPoint, extraWords )
 
 # if evalVecExpectation = True, compute the expectation of all embeddings
 evalVecExpectation = False
