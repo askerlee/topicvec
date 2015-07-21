@@ -1,4 +1,4 @@
-# topicvec
+#topicvec
 Source code for the manuscript "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution".
 
 ####Update v0.4: 
