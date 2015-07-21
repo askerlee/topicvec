@@ -19,7 +19,7 @@ simTestsetDir = "./testsets/ws/"
 simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
 anaTestsetDir = "./testsets/analogy/"
 # if set to [], run all testsets
-anaTestsetNames = [] #[ "google", "msr" ]
+anaTestsetNames = [ "google", "msr" ]
 
 unigramFilename = "top1grams-wiki.txt"
 vecNormalize = True
@@ -153,11 +153,17 @@ model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
 if precomputeCosine:
     model.precompute_cosine()
 
+print
+
 simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)
 anaTestsets = loadTestsets(loadAnaTestset, anaTestsetDir, anaTestsetNames)
 
+print
+
 spearmanCoeff, absentModelID2Word1, absentVocabWords1, cutVocabWords1 = \
             evaluate_sim( model, simTestsets, simTestsetNames, getAbsentWords, vocab, testwordCutPoint )
+
+print
 
 anaScores,     absentModelID2Word2, absentVocabWords2, cutVocabWords2 = \
             evaluate_ana( model, anaTestsets, anaTestsetNames, getAbsentWords, vocab, testwordCutPoint )
