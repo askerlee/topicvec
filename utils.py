@@ -458,7 +458,7 @@ def loadBigramFile( bigram_filename, topWordNum, extraWords, kappa=0.01 ):
             orig_wid = int(orig_wid)
             neighborTotalOccur = float(neighborTotalOccur)
 
-            if orig_wid % 500 == 0:
+            if orig_wid % 200 == 0:
                 print "\r%d\r" %orig_wid,
 
             if orig_wid <= topWordNum or w in extraWords:
@@ -553,7 +553,7 @@ def loadBigramFile( bigram_filename, topWordNum, extraWords, kappa=0.01 ):
 # word2preID_core are the IDs of words in the pretrained embedding file
 # If vocab_core and word2preID_core are specified, core words are limited to words in them
 # Otherwise the top core_size words are core words
-def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2preID_core={}, skippedPreWords={}, kappa=0.02 ):
+def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2preID_core={}, prewords_skipped={}, kappa=0.02 ):
 
     if len(word2preID_core) > 0:
         corewords_specified = True
@@ -569,8 +569,8 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
         # otherwise I don't know how many words are core words
         if core_size < 0:
             raise ValueError( "Argument error: core_size = %d < 0 when word2preID_core is not specified" %core_size )
-        if len(skippedPreWords) > 0:
-            raise ValueError( "Argument error: word2preID_core is empty but skippedPreWords is not" )
+        if len(prewords_skipped) > 0:
+            raise ValueError( "Argument error: word2preID_core is empty but prewords_skipped is not" )
 
     # if corewords_specified, return a list of coreword IDs in the pretrained mapping
     # otherwise, return empty list (just for return value conformity)
@@ -579,14 +579,14 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
     if not recordUpperleft:
         # do not record G11/F11
         print "Loading bigram file '%s' into 2 blocks. Will skip %d words" \
-                                    %( bigram_filename, len(skippedPreWords) )
+                                    %( bigram_filename, len(prewords_skipped) )
     else:
         print "Loading bigram file '%s' into 3 blocks." %bigram_filename
 
     BIGRAM = open(bigram_filename)
 
     lineno = 0
-    vocab = []
+    vocab_all = []
     vocab_core = []
     vocab_noncore = []
 
@@ -621,7 +621,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
         if min_vocab_size > wholeVocabSize:
             raise ValueError( "%d (%d + %d) words demanded, but only %d declared in header" %( min_vocab_size, core_size,
                                                                                              max( noncore_size, 1 ), wholeVocabSize) )
-        # all the words are included in the vocab
+        # all the words are included in the vocab_all
         # in this case, vocab_size needs to be initialized
         if not corewords_specified:
             if noncore_size < 0:
@@ -689,7 +689,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
                         if wc > max_core_origID:
                             max_core_origID = wc
 
-                    elif w in skippedPreWords:
+                    elif w in prewords_skipped:
                         skipped_wc += 1
                     elif noncore_size < 0 or noncore_wc < noncore_size :
                         word2id_noncore[w] = noncore_wc
@@ -712,7 +712,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
                         word2id_noncore[w] = wc - core_size
 
                     log_u0.append(float(log_ui))
-                    vocab.append(w)
+                    vocab_all.append(w)
                     wc += 1
 
         if corewords_specified:
@@ -725,7 +725,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
             noncore_size = noncore_wc
             vocab_size = core_size + noncore_size
             log_u0 = log_u0_core + log_u0_noncore
-            vocab = vocab_core + vocab_noncore
+            vocab_all = vocab_core + vocab_noncore
 
             word2id_all = word2id_core.copy()
             # insert noncore words into word2id_all
@@ -748,7 +748,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
         # unigram prob & logprob of all the words
         log_u0 = np.array(log_u0)
         u0 = np.exp(log_u0)
-        # re-normalization is needed, as some unigrams may be out of vocab
+        # re-normalization is needed, as some unigrams may be out of vocab_all
         u0 /= np.sum(u0)
 
         log_u0 = np.log(u0)
@@ -800,7 +800,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
             log_u = log_u_noncore
 
         # focusIDLimit: the limit of neighbor wid
-        # Currently read all neighbors
+        # In the beginning, read all neighbors
         focusIDLimit = vocab_size
 
         # vars are initialized like those of a core word,
@@ -849,7 +849,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
 
                     lastContextIsCore = True
 
-            else:
+            elif w in word2id_noncore:
                 contextIsCore = False
                 wid = word2id_noncore[w]
                 # context type switches from core to noncore, update relevant variables
@@ -868,9 +868,11 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
             # x_{i.}
             x_i = np.zeros(rowLength, dtype=np.float32)
 
-            if w in skippedPreWords:
+            if w in prewords_skipped:
+                saveCurrRow = False
                 skipRemainingNeighbors = True
             else:
+                saveCurrRow = True
                 skipRemainingNeighbors = False
 
             while True:
@@ -902,10 +904,10 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
 
                     # w2 in skip list, and surely not in word2id_all
                     # so check here to avoid setting skipRemainingNeighbors
-                    if w2 in skippedPreWords:
+                    if w2 in prewords_skipped:
                         continue
                         
-                    # when meeting the first focus word out of vocab, all following focus words are not in vocab
+                    # when meeting the first focus word out of vocab_all, all following focus words are not in vocab_all
                     # since neighbors are sorted ascendingly by ID
                     # So they are skipped to speed up reading
                     if w2 not in word2id_all:
@@ -939,6 +941,9 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
                         w2id = word2id_core[w2]
                         x_i[w2id] = freq2
 
+            if not saveCurrRow:
+                continue
+                
             # Question: whether set F to the original freq or smoothed freq (assign F before or after smoothing)?
             if contextIsCore:
                 if recordUpperleft:
@@ -1009,7 +1014,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
         G = [ G12, G21 ]
         F = [ F12, F21 ]
 
-    return vocab, word2id_all, word2id_core, coreword_preIDs, G, F, u0
+    return vocab_all, word2id_all, word2id_core, coreword_preIDs, G, F, u0
 
 def loadUnigramFile(filename):
     UNI = open(filename)

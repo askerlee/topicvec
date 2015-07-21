@@ -475,16 +475,13 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diago
     else:
         return RawCounts
 
-# vocab is used in save_embeddings
-# testenv might be None, so a separate "vocab" argument is necessary
-def block_factorize( G, F, V1, N0, core_size, vocab, do_weight_cutoff, testenv=None, save_residuals=False ):
+def block_factorize( G, F, V1, N0, do_weight_cutoff ):
     # new G12, G21, F12, F21, allocated in loadBigramFileInBlock() and passed in
     # core_size * noncore_size, noncore_size * core_size
     G12, G21 = G
     F12, F21 = F
 
     noncore_size = len(G21)
-    vocab_size = len(vocab)
 
     Weight12, Weight21 = normalizeWeight( [ F12, F21 ], do_weight_cutoff, zero_diagonal=False)
 
@@ -507,7 +504,7 @@ def block_factorize( G, F, V1, N0, core_size, vocab, do_weight_cutoff, testenv=N
 
     # embeddings of noncore words
     # new V2: noncore_size * N0
-    V2 = np.zeros( ( noncore_size, N0 ) )
+    V2 = np.zeros( ( noncore_size, N0 ), dtype=np.float32 )
 
     timer = Timer()
 
@@ -522,8 +519,8 @@ def block_factorize( G, F, V1, N0, core_size, vocab, do_weight_cutoff, testenv=N
         # new VWV: N0 * N0
         VWV = VW.dot(V1)
         V2[i] = np.linalg.inv(VWV).dot( VW.dot(Gwmean[i]) )
-        if i > 0 and i % 100 == 0:
-            print "\r%d / %d." %(i,noncore_size),
+        if i >= 0 and i % 100 == 99:
+            print "\r%d / %d." %(i+1,noncore_size),
             print timer.getElapseTime(), "\r",
 
     print
@@ -535,51 +532,25 @@ def block_factorize( G, F, V1, N0, core_size, vocab, do_weight_cutoff, testenv=N
     memLogger.debug( "del F21, WGsum, VW" )
     del F21, Weight21, Wsum, Gwmean, WGsum, VW
 
-    V = np.concatenate( (V1, V2) )
-    memLogger.debug( "del V1, V2" )
-    del V1, V2
+    return V2
+    
 
-    save_embeddings( "%d-%d-%s.vec" %(vocab_size, N0, "BLKEM"), vocab, V, "V" )
-
-    """
-    if test_block:
-        print "Test EM on the complete matrix\n"
-        VV = np.dot( V, V.T )
-        G0 = G[3]
-        Weight0 = normalizeWeight( [ F[3] ], do_weight_cutoff )
-        print "L1 Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight0), norm1(G0 - VV, Weight0) )
-
-        testenv['word2id'] = testenv['word2id_all']
-        we_factorize_EM( G0, Weight0, N0, MAXITERS, testenv )
-        print
-    """
-
-    if testenv:
-        print "Test embeddings derived from block factorization\n"
-        # An array of vocab_size * vocab_size is created here. Watch the amount of memory
-        model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True )
-        evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
-        evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
-
-    if save_residuals:
-        VV = np.dot( V, V.T )
-        A = G - VV
-        save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, "BLKEM"), vocab, A, "A" )
-    print
-
-def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv ):
+def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv, save_residuals=False ):
     V, VV = alg( G, Weight, N0, MAX_ITERS, testenv )
-    A = G - VV
     print
 
     vocab_size = len(vocab)
 
     save_embeddings( "%d-%d-%s.vec" %(vocab_size, N0, algName), vocab, V, "V" )
-    save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, algName), vocab, A, "A" )
     print
+    
+    if save_residuals:
+        A = G - VV
+        save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, algName), vocab, A, "A" )
+        print
 
 def usage():
-    print """factorize.py [ -n vec_dim -b num_core_words -v core_vec_file ... ] bigram_file
+    print """factorize.py [ -n vec_dim -b num_core_words -v core_pre_vec_file ... ] bigram_file
 Options:
   -n:  Dimensionality of the generated embeddings. Default: 500
   -b:  Do block-wise decomposition, and specify the number of core words
@@ -605,19 +576,20 @@ def main():
     vocab_size = -1
     core_size = -1
     noncore_size = -1
-    vec_file = None
+    pre_vec_file = None
     test_block = False
 
     do_smoothing = True
     do_weight_cutoff = True
     extraWordFile = None
     do_UniWeight = False
-    MAX_EM_ITERS = 0
+    MAX_EM_ITERS = 4
     MAX_FW_ITERS = 0
     # EM iters of the core words
     MAX_CORE_EM_ITERS = 4
     do_block_factorize = False
-
+    save_residuals = False
+    
     try:
         opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:E:F:CUh")
         if len(args) != 1:
@@ -631,7 +603,7 @@ def main():
                 core_size = int(arg)
             if opt == '-v':
                 do_block_factorize = True
-                vec_file = arg
+                pre_vec_file = arg
             if opt == '-o':
                 do_block_factorize = True
                 noncore_size = int(arg)
@@ -676,11 +648,6 @@ def main():
             print "Extra word file is unnecessary when doing blockwise factorization"
             sys.exit(2)
 
-        # do_block_factorize might be accidentally enabled by -o, from which alone we couldn't proceed
-        if not vec_file and core_size < 0:
-            print "Neither -v nor -b is specified. Unable to determine core words"
-            sys.exit(2)
-
         if vocab_size > 0 and core_size > 0:
             # in case -o, -w, -b are all specified, check their consistency
             if noncore_size > 0 and noncore_size != vocab_size - core_size:
@@ -689,21 +656,29 @@ def main():
             else:
                 noncore_size = vocab_size - core_size
                 
-        if not vec_file:
+        if not pre_vec_file:
+            # do_block_factorize might be accidentally enabled by -o. But without -v or -b we couldn't proceed
+            if core_size < 0:
+                print "Neither -v nor -b is specified. Unable to determine core words"
+                sys.exit(2)
+                
             # passed-in word2preID_core={}
-            vocab, word2id_all, word2id_core, coreword_preIDs, G, F, u \
+            vocab_all, word2id_all, word2id_core, coreword_preIDs, G, F, u \
                                                           = loadBigramFileInBlock( bigram_filename, core_size,
-                                                              noncore_size, {}, kappa )
+                                                              noncore_size, {}, {}, kappa )
             # returned coreword_preIDs = []
 
+            # Usually in the bigram file there are many more words than -b core_size 
+            # so the actual core words read should always be core_size words. No update needed
+            
             G11 = G.pop(0)
             F11 = F.pop(0)
 
             # Weight normalization is in place. F11 couldn't be released prior to Weight11
             Weight11 = normalizeWeight( [ F11 ], do_weight_cutoff)
 
-            # since vec_file is not specified, according to a previous condition, we know core_size > 0
-            testenv['vocab'] = vocab[:core_size]
+            # since pre_vec_file is not specified, according to a previous condition, we know core_size > 0
+            testenv['vocab'] = vocab_all[:core_size]
             testenv['word2id'] = word2id_core
 
             # obtain embeddings of core words
@@ -714,36 +689,120 @@ def main():
             memLogger.debug( "del G11, F11, VV1" )
             # Weight11 is a reference to F11. Has to be deleted too to release F11
             del G11, F11, Weight11, VV1
-
+            vocab_joint = vocab_all
+            V_pre_skipped = []
+            word2id_joint = word2id_all
+            
         else:
             if core_size > 0:
-                print "Embeddings of top %d words in '%s' will be loaded as core words" %( core_size, vec_file )
+                print "Embeddings of top %d words in '%s' will be loaded as core" %( core_size, pre_vec_file )
             else:
-                print "Embeddings of all words in '%s' will be loaded as core words" %(vec_file)
+                print "Embeddings of all words in '%s' will be loaded as core" %(pre_vec_file)
 
-            V1, vocab_core, word2preID_core, skippedPreWords = load_embeddings(vec_file, core_size)
-            # recompute core_size. If there are less than core_size words in vec_file, then the actual core_size is smaller
-            core_size = len(vocab_core)
-
+            # here we don't skip words yet
+            # skippedWords_whatever is empty and we don't care about it
+            V_pre, vocab_pre, word2preID, skippedWords_whatever = load_embeddings(pre_vec_file)
+            N0 = V_pre.shape[1]
+            
+            prewords_skipped = {}
+            vocab_skipped = []
+            
+            # recompute core_size, initialize vocab_core & word2preID_core
+            # If there are less than core_size words in pre_vec_file, then the whole returned vocab is used as vocab_core
+            # the actual core_size is smaller than specified core_size
+            if core_size == -1 or core_size > len(vocab_pre):
+                core_size = len(vocab_pre)
+                vocab_core = vocab_pre
+                word2preID_core = word2preID
+            # 0 < core_size <= len(vocab_core)
+            # the first core_size words in vocab_pre are vocab_core 
+            else:
+                vocab_core = vocab_pre[:core_size]
+                vocab_skipped = vocab_pre[core_size:]
+                for w in vocab_skipped:
+                    prewords_skipped[w] = 1
+                word2preID_core = {}
+                for w in vocab_core:
+                    word2preID_core[w] = word2preID[w]
+                
             if noncore_size > 0:
-                print "2 blocks of %d noncore words and %d core words will be loaded" %( noncore_size, core_size )
+                print "2 blocks of %d core words and %d noncore words will be loaded. Skip %d words" \
+                                %( core_size, noncore_size, len(prewords_skipped) )
             else:
-                print "2 blocks of %d core words and all noncore words will be loaded" %(core_size)
+                print "2 blocks of %d core words and all noncore words will be loaded. Skip %d words" \
+                                %( core_size, len(prewords_skipped) )
 
-            vocab, word2id_all, word2id_core, coreword_preIDs, G, F, u = \
+            vocab_all, word2id_all, word2id_core, coreword_preIDs, G, F, u = \
                                          loadBigramFileInBlock( bigram_filename, core_size, noncore_size,
-                                           word2preID_core, skippedPreWords, kappa )
+                                           word2preID_core, prewords_skipped, kappa )
+            # the actual skipped vocab might be larger than vocab_skipped above.
+            # Some pre core words might not exist in this bigram file, thus not in coreword_preIDs,
+            # so they should be added to vocab_skipped
 
-            # select corresponding rows (word order might change)
-            V1 = V1[coreword_preIDs]
-
-        vocab_size = len(vocab)
-        testenv['vocab'] = vocab
-        testenv['word2id'] = word2id_all
-
-        # block_factorize( G, F, V1, N0, core_size, vocab, do_weight_cutoff, MAXITERS, testenv=None, save_residuals=False ):
-        block_factorize( G, F, V1, N0, core_size, vocab, True, testenv )
-
+            # update core_size to the num of pre core words existing in the bigram file
+            core_size = len(word2id_core)
+            noncore_size = len(word2id_all) - core_size
+            # select corresponding rows into V1 and V_pre_skipped. 
+            # V1 is some rows within the 0:core_size rows of V_pre, but row order might change
+            # other rows are into V_pre_skipped
+            V1 = V_pre[coreword_preIDs]
+            skippedPreIDMask = np.ones( len(vocab_pre), np.bool )
+            skippedPreIDMask[coreword_preIDs] = 0
+            V_pre_skipped = V_pre[skippedPreIDMask]
+            skippedPreIDs = set( xrange( len(vocab_pre) ) ) - set(coreword_preIDs)
+            #pdb.set_trace()
+            # update vocab_skipped, add words in the pre vec file but not in the bigram file
+            vocab_skipped = [ vocab_pre[i] for i in skippedPreIDs ]
+            vocab_joint = vocab_all[:core_size] + vocab_skipped + vocab_all[core_size:]
+            #vocab_joint = vocab_all[:core_size] + vocab_all[core_size:]
+            # updated word to ID mapping
+            word2id_joint = { w:i for (i, w) in enumerate(vocab_joint) }
+            
+        # block_factorize( G, F, V1, N0, do_weight_cutoff ):
+        V2 = block_factorize( G, F, V1, N0, True )
+        
+        # concatenate vocab's and V's. 
+        # A use case:
+        # On an original vocab of [ 1, ..., i1, ..., i2, ..., i3, ... ] 
+        # 1. Factorize [ 1, ..., i1 ] as cores, and block factorize [ i1+1, ..., i2 ]
+        # Save to a vec file.
+        # vocab_all = vocab_joint = [ 1, ..., i1, ..., i2, ..., i3 ]
+        # vocab_skipped = []
+        # 2. load the vec file, use [ 1, ..., i1 ] as cores, and block factorize [ i2+1, ..., i3 ]
+        # So in the second run of block factorization, skipped words should be placed inbetween
+        # vocab_all = [ 1, ..., i1, i2+1, ..., i3 ]
+        # vocab_skipped = [ i1+1, ..., i2 ]
+        # vocab_joint = [ 1, ..., i1, i1+1, ..., i2, i2+1, ..., i3 ]
+        
+        vocab_jointsize = len(vocab_joint)
+        #V_joint = np.concatenate( ( V1, V2 ) )
+        V_joint = np.concatenate( ( V1, V_pre_skipped, V2 ) )
+        save_embeddings( "%d-%d-%d-%s.vec" %(core_size, vocab_jointsize, N0, "BLKEM"), vocab_joint, V_joint, "V" )
+    
+        """
+        if test_block:
+            print "Test EM on the complete matrix\n"
+            VV = np.dot( V, V.T )
+            G0 = G[3]
+            Weight0 = normalizeWeight( [ F[3] ], do_weight_cutoff )
+            print "L1 Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight0), norm1(G0 - VV, Weight0) )
+    
+            testenv['word2id'] = testenv['word2id_all']
+            we_factorize_EM( G0, Weight0, N0, MAXITERS, testenv )
+            print
+        """
+    
+        if testenv:
+            testenv['vocab'] = vocab_joint
+            testenv['word2id'] = word2id_joint
+            print "Test embeddings derived from block factorization\n"
+            # An array of vocab_size * vocab_size is created here. Watch the amount of memory
+            model = VecModel( V_joint, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+            evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
+            evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
+    
+        # never save residuals when doing block factorization
+        
     else:
         extraWords = {}
         if extraWordFile:
@@ -758,19 +817,19 @@ def main():
         testenv['word2id'] = word2id
 
         # Weight modifies F in place. Memory copy is avoided
-        Weight = normalizeWeight( F, do_weight_cutoff=True )
+        Weight = normalizeWeight( [ F ], do_weight_cutoff=True )
 
         #we_factorize_GD( G, Weight, N0, testenv )
 
         # factorize( alg, algName, G, Weight, N, MAX_ITERS, vocab, testenv )
         if do_UniWeight:
-            factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, testenv )
+            factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, testenv, save_residuals )
 
         if MAX_EM_ITERS > 0:
-            factorize( we_factorize_EM, "EM", G, Weight, N0, MAX_EM_ITERS, vocab, testenv )
+            factorize( we_factorize_EM, "EM", G, Weight, N0, MAX_EM_ITERS, vocab, testenv, save_residuals )
 
         if MAX_FW_ITERS > 0:
-            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_EM_ITERS, vocab, testenv )
+            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_EM_ITERS, vocab, testenv, save_residuals )
 
 
 if __name__ == '__main__':
