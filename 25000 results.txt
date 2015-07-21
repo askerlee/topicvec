@@ -1,0 +1,11 @@
+python evaluate.py -m 25000-500-EM.vec
+
+ws353_similarity: 203 test pairs, 195 valid , 0.80089
+ws353_relatedness: 252 test pairs, 241 valid , 0.67612
+bruni_men: 3000 test pairs, 2639 valid , 0.76526
+radinsky_mturk: 287 test pairs, 279 valid , 0.67757
+luong_rare: 2034 test pairs, 396 valid , 0.55357
+simlex_999a: 999 test pairs, 945 valid , 0.39342
+
+google: 19544 analogies, 12586 valid . Add Score: 0.67098, Mul Score: 0.69466
+msr: 8000 analogies, 5030 valid . Add Score: 0.53300, Mul Score: 0.58569
