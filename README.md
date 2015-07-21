@@ -13,6 +13,6 @@ Source code for the manuscript "A Generative Word Embedding Model and its Low Ra
 Pretrained 120,000 embeddings and evaluation results are uploaded.
 
 #### Update v0.3: Block-wise factorization
-Pretrained 100,000 embeddings and evaluation results are uploaded (_now replaced by an enlarged set of 120,000 embeddings_).
+Pretrained 100,000 embeddings and evaluation results are uploaded (_now replaced by an expanded set of 120,000 embeddings_).
 
 Testsets are by courtesy of Omer Levy (https://bitbucket.org/omerlevy/hyperwords/src).
