@@ -631,9 +631,9 @@ def main():
         sys.exit(2)
 
     # load testsets
-    simTestsetDir = "D:/Dropbox/topicvec/code/testsets/ws/"
+    simTestsetDir = "./testsets/ws/"
     simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
-    anaTestsetDir = "D:/Dropbox/topicvec/code/testsets/analogy/"
+    anaTestsetDir = "./testsets/analogy/"
     anaTestsetNames = [ "google", "msr" ]
 
     simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)

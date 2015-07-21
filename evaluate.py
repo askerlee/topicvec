@@ -7,17 +7,17 @@ import numpy as np
 #import pdb
 
 getAbsentWords = False
-modelFiles = [ "d:/corpus/GoogleNews-vectors-negative300.bin", "29291-500-EM.vec", "100000-500-BLKEM.vec",
-                "d:/corpus/wordvecs/vec_520_forest", "d:/omer/glove/wiki-glove.vec2.txt" ]
+modelFiles = [ "./GoogleNews-vectors-negative300.bin", "./29291-500-EM.vec", "./100000-500-BLKEM.vec",
+                "./wordvecs/vec_520_forest", "./wiki-glove.vec2.txt" ]
 
 isModelsBinary = [ True, False, False, False, False ]
-modelID = 3
+modelID = -1
 
 # default is current directory
-simTestsetDir = "d:/Dropbox/topicvec/omer2/testsets/ws/"
+simTestsetDir = "./testsets/ws/"
 # if set to [], run all testsets
 simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
-anaTestsetDir = "d:/Dropbox/topicvec/omer2/testsets/analogy/"
+anaTestsetDir = "./testsets/analogy/"
 # if set to [], run all testsets
 anaTestsetNames = [ "google", "msr" ]
 
@@ -29,6 +29,7 @@ absentFilename = ""
 extraWordFilename = ""
 # default is in text format
 isModelBinary = False
+modelFile = None
 
 def usage():
     print """Usage: evaluate.py [ -m model_file -i builtin_model_id -e extra_word_file -a absent_file -u unigram_file ]
@@ -96,6 +97,10 @@ if modelID > 0:
     modelFile = modelFiles[ modelID - 1 ]
     isModelBinary = isModelsBinary[ modelID - 1 ]
 
+if modelFile is None:
+    usage()
+    sys.exit(2)
+    
 vocab = {}
 if unigramFilename:
     vocab = loadUnigramFile(unigramFilename)
