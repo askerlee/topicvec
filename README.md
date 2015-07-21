@@ -10,7 +10,9 @@ Source code for the manuscript "A Generative Word Embedding Model and its Low Ra
     * ```python factorize.py -v 25000-70000-500-BLKEM.vec -b 25000 -o 50000 top2grams-wiki.txt```
 4. Repeat 3 a few times to get more embeddings of rarer words.
 
+Pretrained 120,000 embeddings and evaluation results are uploaded.
+
 #### Update v0.3: Block-wise factorization
-Pretrained 100,000 embeddings and evaluation results are uploaded.
+Pretrained 100,000 embeddings and evaluation results are uploaded (_replaced by a pretrained vec file of 120,000 embeddings_).
 
 Testsets are by courtesy of Omer Levy (https://bitbucket.org/omerlevy/hyperwords/src).
