@@ -5,6 +5,7 @@ import os.path
 from utils import *
 import numpy as np
 #import pdb
+from psutil import virtual_memory
 
 getAbsentWords = False
 modelFiles = [ "./GoogleNews-vectors-negative300.bin", "./29291-500-EM.vec", "./100000-500-BLKEM.vec",
@@ -150,6 +151,20 @@ if evalVecExpectation and unigramFilename:
                                                                 norm1(expVec), normF(expVec), expVecNorm1, expVecNorm2 )
 
 model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
+
+if precomputeCosine:
+    mem = virtual_memory()
+    installedMemGB = round( mem.total * 1.0 / (1<<30) )
+    requiredMemGB = len(V) * len(V) * 4.0 / 1000000000
+    
+    if requiredMemGB >= installedMemGB:
+        print "WARN: %.1fGB mem detected, %.1fGB mem required to precompute the cosine matrix" %( installedMemGB, requiredMemGB )
+        if requiredMemGB >= installedMemGB * 1.2:
+            print "Precomputation of the cosine matrix is disabled automatically."
+            precomputeCosine = False
+        else:
+            print "In case of memory shortage, you can specify -P to disable"
+
 if precomputeCosine:
     model.precompute_cosine()
 
