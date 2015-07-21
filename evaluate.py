@@ -19,7 +19,7 @@ simTestsetDir = "./testsets/ws/"
 simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
 anaTestsetDir = "./testsets/analogy/"
 # if set to [], run all testsets
-anaTestsetNames = [ "google", "msr" ]
+anaTestsetNames = [] #[ "google", "msr" ]
 
 unigramFilename = "top1grams-wiki.txt"
 vecNormalize = True
@@ -30,9 +30,12 @@ extraWordFilename = ""
 # default is in text format
 isModelBinary = False
 modelFile = None
+# precompute the cosine similarity matrix of all pairs of words
+# need W*W*4 bytes of RAM
+precomputeCosine = True
 
 def usage():
-    print """Usage: evaluate.py [ -m model_file -i builtin_model_id -e extra_word_file -a absent_file -u unigram_file ]
+    print """Usage: evaluate.py [ -m model_file -i builtin_model_id -e extra_word_file -a absent_file -u unigram_file ... ]
 Options:
   -m:    Path to the model file, a ".vec" or ".bin" file for word2vec
   -b:    Model file is in binary format (default: text)
@@ -40,6 +43,8 @@ Options:
   -f:    A list of test files in the specified directory
   -i:    Builtin model ID for the benchmark. Range: 1 (word2vec),
          2 (PSD 29291 words), 3 (block PSD 100000 words), 4 (forest), 5(glove)
+  -P:    Do not precompute cosine matrix. When the vocab is huge, 
+         it's necessary to disable computing this matrix.
   -u:    Unigram file, for missing word check.
          Its presence will enable checking of what words are missing
          from the vocabulary and the model
@@ -50,7 +55,7 @@ Options:
   -a:    Absent file. Words below the cut point will be saved there"""
 
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"m:bd:f:i:a:u:c:t:e:h")
+    opts, args = getopt.getopt(sys.argv[1:],"m:bd:f:i:Pu:c:t:e:a:h")
     if len(args) != 0:
         raise getopt.GetoptError("")
     for opt, arg in opts:
@@ -65,9 +70,8 @@ try:
             testsetNames = filter( lambda x: x, arg.split(",") )
         if opt == '-i':
             modelID = int(arg)
-        if opt == '-a':
-            getAbsentWords = True
-            absentFilename = arg
+        if opt == '-P':
+            precomputeCosine = False
         if opt == '-u':
             # unigram file is used to get a full list of words,
             # and also to sort the absent words by their frequencies
@@ -78,6 +82,9 @@ try:
             testwordCutPoint = int(arg)
         if opt == '-e':
             extraWordFilename = arg
+        if opt == '-a':
+            getAbsentWords = True
+            absentFilename = arg
         if opt == '-h':
             usage()
             sys.exit(0)
@@ -143,7 +150,8 @@ if evalVecExpectation and unigramFilename:
                                                                 norm1(expVec), normF(expVec), expVecNorm1, expVecNorm2 )
 
 model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
-model.precompute_cosine()
+if precomputeCosine:
+    model.precompute_cosine()
 
 simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)
 anaTestsets = loadTestsets(loadAnaTestset, anaTestsetDir, anaTestsetNames)

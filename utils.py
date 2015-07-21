@@ -219,17 +219,18 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
                 skippedWords[w] = 1
 
             orig_wid += 1
+
+            if isInterested:
+                V[wid] = np.array( [ float(x) for x in fields[1:] ], dtype=precision )
+                word2id[w] = wid
+                vocab.append(w)
+                wid += 1
+
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    %d    \r" %( orig_wid, wid, len(extraWords) ),
 
-            if not isInterested:
-                continue
-
-            V[wid] = np.array( [ float(x) for x in fields[1:] ], dtype=precision )
-            word2id[w] = wid
-            vocab.append(w)
-
-            wid += 1
+            if orig_wid > vocab_size:
+                raise ValueError( "%d words declared in header, but more are read" %(vocab_size) )
 
     except ValueError, e:
         if len( e.args ) == 2:
@@ -315,21 +316,20 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
                 skippedWords[w] = 1
 
             orig_wid += 1
+
+            if isInterested:
+                word2id[word] = wid
+                vocab.append(word)
+                V[wid] = np.fromstring( fin.read(full_binvec_len), dtype=precision )
+                wid += 1
+            else:
+                fin.read(full_binvec_len)
+
             if orig_wid % 1000 == 0:
                 print "\r%d    %d    %d    \r" %( orig_wid, wid, len(extraWords) ),
 
-            if not isInterested:
-                fin.read(full_binvec_len)
-                continue
-
-            word2id[word] = wid
-            vocab.append(word)
-            V[wid] = np.fromstring( fin.read(full_binvec_len), dtype=precision )
-
-            wid += 1
-
-            if orig_wid >= vocab_size:
-                break
+            if orig_wid > vocab_size:
+                raise ValueError( "%d words declared in header, but more are read" %(vocab_size) )
 
     if wid < len(V):
         V = V[:wid]
