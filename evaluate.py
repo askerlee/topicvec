@@ -34,6 +34,7 @@ modelFile = None
 # precompute the cosine similarity matrix of all pairs of words
 # need W*W*4 bytes of RAM
 precomputeCosine = True
+skipPossessive = False
 
 def usage():
     print """Usage: evaluate.py [ -m model_file -i builtin_model_id -e extra_word_file -a absent_file -u unigram_file ... ]
@@ -53,10 +54,11 @@ Options:
   -t:    Vocabulary cut point for the test sets. All words in the test sets
          whose IDs are below it will be picked out
   -e:    Extra word file. Words in this list will be loaded anyway
-  -a:    Absent file. Words below the cut point will be saved there"""
-
+  -a:    Absent file. Words below the cut point will be saved there
+  -p:    Skip possessive analogy pairs"""
+  
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"m:bd:f:i:Pu:c:t:e:a:h")
+    opts, args = getopt.getopt(sys.argv[1:],"m:bd:f:i:Pu:c:t:e:a:sh")
     if len(args) != 0:
         raise getopt.GetoptError("")
     for opt, arg in opts:
@@ -86,6 +88,8 @@ try:
         if opt == '-a':
             getAbsentWords = True
             absentFilename = arg
+        if opt == '-s':
+            skipPossessive = True
         if opt == '-h':
             usage()
             sys.exit(0)
@@ -171,7 +175,11 @@ if precomputeCosine:
 print
 
 simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)
-anaTestsets = loadTestsets(loadAnaTestset, anaTestsetDir, anaTestsetNames)
+
+if skipPossessive:
+    anaTestsets = loadTestsets( loadAnaTestset, anaTestsetDir, anaTestsetNames, { 'skipPossessive': 1 } )
+else:
+    anaTestsets = loadTestsets( loadAnaTestset, anaTestsetDir, anaTestsetNames )
 
 print
 

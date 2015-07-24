@@ -1336,7 +1336,7 @@ class VecModel:
             return self.Vorig[ self.word2id[w] ]
 
     def precompute_cosine(self):
-        print "Precompute cosine matrix, will need %.1f GB RAM..." %( len(self.V) * len(self.V) * 4.0 / 1000000000 ),
+        print "Precompute cosine matrix, will need %.1fGB RAM..." %( len(self.V) * len(self.V) * 4.0 / 1000000000 ),
         self.cosTable = np.dot( self.V, self.V.T )
         print "Done."
 
@@ -1365,11 +1365,11 @@ class VecModel:
             return 0
 
         if self.vecNormalize:
-            if self.cosTable is None:
-                self.precompute_cosine()
-            ix = self.word2id[x]
-            return self.cosTable[ix]
-
+            if self.cosTable is not None:
+                ix = self.word2id[x]
+                return self.cosTable[ix]
+            return self.V.dot(self[x])
+            
         vx = self[x]
         # vector too short. the dot product similarity doesn't make sense
         if normF(vx) <= 1e-6:
