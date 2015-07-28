@@ -1,5 +1,5 @@
-# TopicVec
-Source code for the manuscript "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution".
+# PSDVec
+Source code for the manuscripts "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" and "PSDVec: Positive Semidefinte Word Embedding".
 
 #### Update v0.4: Online block-wise factorization:
 1. Obtain 25000 core embeddings, into _25000-500-EM.vec_:
