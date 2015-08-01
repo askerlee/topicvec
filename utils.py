@@ -1326,10 +1326,10 @@ def isMemEnoughGramian(D, extraVarsRatio=0):
         
     # give a warning, will use some paging file and make the computer very slow
     elif requiredMemGB <= installedMemGB * 1.2:
-        isEnough - 1
+        isEnough = 1
     # not enough
     else:
-        isEnough - 0
+        isEnough = 0
 
     return isEnough, installedMemGB, requiredMemGB
 
@@ -1353,10 +1353,10 @@ def isMemEnoughEigen(D, extraVarsRatio=5):
         
     # give a warning, will use some paging file and make the computer very slow
     elif requiredMemGB <= installedMemGB * 1.2:
-        isEnough - 1
+        isEnough = 1
     # not enough
     else:
-        isEnough - 0
+        isEnough = 0
 
     return isEnough, installedMemGB, requiredMemGB
                 

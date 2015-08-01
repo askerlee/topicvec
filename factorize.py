@@ -466,7 +466,7 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
     return V, VV
 
 # RawCounts is a list of numpy arrays. It may contain only one array
-def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0004, zero_diagonal=True ):
+def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0002, zero_diagonal=True ):
     for Weight in RawCounts:
         np.sqrt(Weight, Weight)
 
