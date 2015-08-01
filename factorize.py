@@ -69,7 +69,7 @@ def uniwe_factorize(G, u, N0, MAXITERS=0, testenv=None):
 #        print "VV: %.3f, G-VV: %.3f" %( norm1(VV, BigramWeight), norm1(G - VV, BigramWeight) )
 
     if testenv:
-        model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+        model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
         evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
         evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -134,17 +134,35 @@ def nowe_factorize(G, N):
 # N0: desired rank of V
 def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
     timer1 = Timer( "we_factorize_GD()" )
+    # D is the number of words in the vocab (W in the paper)
     D = len(Weight)
 
-    # initialize V to unweighted low rank approximation
-    #V, VV = nowe_factorize(G, N0)
-    # In this function, A is defined as VV-G, i.e. minus the returned A
-    #A = -A
+    init_with_nowe = True
+    
+    if init_with_nowe:
+        isEnough, installedMemGB, requiredMemGB = isMemEnoughEigen(D)
+        # enough mem, initialize with unweighted low rank approximation
+        if isEnough >= 1:
+            # initialize V to unweighted low rank approximation
+            V, VV = nowe_factorize(G, N0)
+            # In this function, A is defined as VV-G, i.e. minus the returned A
+            A = VV - G
+        else:
+            print "Not enough RAM: %.1fGB mem detected, %.1fGB mem required." %( installedMemGB, requiredMemGB )
+            print "Initialize V randomly"
+            V = np.random.rand( D, N0 )
+            VV = np.dot( V, V.T )
+            A = VV - G
+    else:
+        print "Initialize V randomly"
+        V = np.random.rand( D, N0 )
+        VV = np.dot( V, V.T )
+        A = VV - G
 
-    V = np.random.rand( D, N0 )
-
-    VV = np.dot( V, V.T )
-    A = VV - G
+    if testenv:
+        model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
+        evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
+        evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
     matSizes1 = matSizes( norm1, [ VV, A ], Weight ) #matSizes( norm1, [VV, Gsym - VV, A], WeightSym ) + \
 
@@ -166,16 +184,11 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 
         # step size
         gamma = 1.0 / ( it + 2 )
-        Grad = np.dot( (A * Weight), V.T )
+        Grad = np.dot( (A * Weight), V )
 
-        if it < 50:
-            r = norm1(V)/norm1(Grad)
-        else:
-            r = 1
+        print "Rate: %f" %(gamma)
 
-        print "Rate: %f" %(r*gamma)
-
-        Vnew = V - r * gamma * Grad
+        Vnew = V - gamma * Grad
         VV = np.dot( Vnew, Vnew.T )
         A = VV - G
 
@@ -191,8 +204,8 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 
         V = Vnew
 
-        if testenv:
-            model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+        if testenv and it %5 == 0:
+            model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -200,6 +213,8 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 
     timer1.printElapseTime()
 
+    VV = np.dot( V, V.T ) 
+    return V, VV
 
 # Weighted factorization by bigram freqs, optimized using EM algorithm
 # if MAXITERS==1, it's identical to nowe_factorize()
@@ -239,7 +254,7 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
         #X = Xnew
 
         if testenv:
-            model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+            model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -379,7 +394,7 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
             V = vs.dot(E_sqrt)
 
             if testenv:
-                model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+                model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
                 evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
                 evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -416,7 +431,7 @@ def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
 #            print "Trunc max ratio: norm1 %.3f, normF %.3f" %( max(ratio1), max(ratioF) )
 
             if testenv:
-                model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+                model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
                 evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
                 evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
 
@@ -536,6 +551,7 @@ def block_factorize( G, F, V1, N0, do_weight_cutoff ):
     
 
 def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv, save_residuals=False ):
+    print "%d iterations of %s" %( MAX_ITERS, algName )
     V, VV = alg( G, Weight, N0, MAX_ITERS, testenv )
     print
 
@@ -562,8 +578,9 @@ Options:
        the top words specified by -w
   -k:  Kappa of Jelinek-Mercer Smoothing (in percent). Default: 2 (=0.02)
   -E:  Number of iterations of the EM procedure. Default: 4
-  -F:  Use Frank-Wolfe procedure instead of EM, and specify the number of
-       iterations
+  -F:  Use Frank-Wolfe procedure, and specify the number of iterations
+  -U:  Use PSD approximation with Unigram weighting
+  -G:  Use Gradient Descent, and specify the number of iterations
 """
 
 def main():
@@ -585,13 +602,14 @@ def main():
     do_UniWeight = False
     MAX_EM_ITERS = 4
     MAX_FW_ITERS = 0
+    MAX_GD_ITERS = 0
     # EM iters of the core words
     MAX_CORE_EM_ITERS = 4
     do_block_factorize = False
     save_residuals = False
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:E:F:CUh")
+        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:cE:F:UG:h")
         if len(args) != 1:
             raise getopt.GetoptError("")
         bigram_filename = args[0]
@@ -613,15 +631,19 @@ def main():
                 extraWordFile = arg
             if opt == '-k':
                 kappa = float(arg) / 100
+            if opt == '-c':
+                do_weight_cutoff = False
             if opt == '-E':
                 MAX_EM_ITERS = int(arg)
                 MAX_CORE_EM_ITERS = int(arg)
             if opt == '-F':
                 MAX_FW_ITERS = int(arg)
-            if opt == '-C':
-                do_weight_cutoff = False
+            # uniweight needs one iteration only. so no arg
             if opt == '-U':
                 do_UniWeight = True
+            if opt == '-G':
+                MAX_GD_ITERS = int(arg)
+                
             if opt == '-h':
                 usage()
                 sys.exit(0)
@@ -797,7 +819,7 @@ def main():
             testenv['word2id'] = word2id_joint
             print "Test embeddings derived from block factorization\n"
             # An array of vocab_size * vocab_size is created here. Watch the amount of memory
-            model = VecModel( V_joint, testenv['vocab'], testenv['word2id'], vecNormalize=True )
+            model = VecModel( V_joint, testenv['vocab'], testenv['word2id'], vecNormalize=True, autoPrecomputeGramian=True )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
     
@@ -825,11 +847,15 @@ def main():
         if do_UniWeight:
             factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, testenv, save_residuals )
 
+        if MAX_FW_ITERS > 0:
+            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_FW_ITERS, vocab, testenv, save_residuals )
+
+        if MAX_GD_ITERS > 0:
+            factorize( we_factorize_GD, "GD", G, Weight, N0, MAX_GD_ITERS, vocab, testenv, save_residuals )
+
         if MAX_EM_ITERS > 0:
             factorize( we_factorize_EM, "EM", G, Weight, N0, MAX_EM_ITERS, vocab, testenv, save_residuals )
 
-        if MAX_FW_ITERS > 0:
-            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_EM_ITERS, vocab, testenv, save_residuals )
 
 
 if __name__ == '__main__':

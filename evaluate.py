@@ -5,7 +5,6 @@ import os.path
 from utils import *
 import numpy as np
 #import pdb
-from psutil import virtual_memory
 
 getAbsentWords = False
 modelFiles = [ "./GoogleNews-vectors-negative300.bin", "./29291-500-EM.vec", "./100000-500-BLKEM.vec",
@@ -33,7 +32,7 @@ isModelBinary = False
 modelFile = None
 # precompute the cosine similarity matrix of all pairs of words
 # need W*W*4 bytes of RAM
-precomputeCosine = True
+precomputeGramian = True
 skipPossessive = False
 
 def usage():
@@ -74,7 +73,7 @@ try:
         if opt == '-i':
             modelID = int(arg)
         if opt == '-P':
-            precomputeCosine = False
+            precomputeGramian = False
         if opt == '-u':
             # unigram file is used to get a full list of words,
             # and also to sort the absent words by their frequencies
@@ -156,22 +155,19 @@ if evalVecExpectation and unigramFilename:
 
 model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
 
-if precomputeCosine:
-    mem = virtual_memory()
-    installedMemGB = round( mem.total * 1.0 / (1<<30) )
-    requiredMemGB = len(V) * len(V) * 4.0 / 1000000000
+if precomputeGramian:
+    isEnough, installedMemGB, requiredMemGB = isMemEnoughGramian( len(V) )
     
-    if requiredMemGB >= installedMemGB:
+    if isEnough <= 1:
         print "WARN: %.1fGB mem detected, %.1fGB mem required to precompute the cosine matrix" %( installedMemGB, requiredMemGB )
-        if requiredMemGB >= installedMemGB * 1.2:
+        if isEnough == 0:
             print "Precomputation of the cosine matrix is disabled automatically."
-            precomputeCosine = False
         else:
             print "In case of memory shortage, you can specify -P to disable"
 
-if precomputeCosine:
-    model.precompute_cosine()
-
+    if isEnough > 0:
+        model.precomputeGramian()
+        
 print
 
 simTestsets = loadTestsets(loadSimTestset, simTestsetDir, simTestsetNames)

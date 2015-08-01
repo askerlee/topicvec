@@ -8,6 +8,7 @@ import sys
 import os
 import glob
 import logging
+from psutil import virtual_memory
 
 memLogger = logging.getLogger("Mem")
 logging.basicConfig( stream=sys.stdout, level=logging.DEBUG )
@@ -1307,8 +1308,50 @@ def bench(func, N, topEigenNum=0):
     print "Elapsed time is %.3f" %diff
     return diff
 
+# return a flag indicating whether installed mem is enough to computing a D*D dimensional Gramian matrix,
+# plus installed amounts and required amounts of mem
+def isMemEnoughGramian(D):
+    mem = virtual_memory()
+    installedMemGB = round( mem.total * 1.0 / (1<<30) )
+    # some overhead for np.array, so not divided by 1024^3
+    requiredMemGB = D * D * 4.0 / 1000000000
+    
+    # installed mem is enough
+    if requiredMemGB <= installedMemGB:
+        isEnough = 2
+        
+    # give a warning, will use some paging file and make the computer very slow
+    elif requiredMemGB <= installedMemGB * 1.2:
+        isEnough - 1
+    # not enough
+    else:
+        isEnough - 0
+
+    return isEnough, installedMemGB, requiredMemGB
+
+# return a flag indicating whether installed mem is enough to computing eigendecomposition of a D*D matrix
+# plus installed amounts and required amounts of mem
+def isMemEnoughEigen(D):
+    mem = virtual_memory()
+    installedMemGB = round( mem.total * 1.0 / (1<<30) )
+    # 15 is an empirical estimation. when D=30K, it takes around 50GB mem
+    requiredMemGB = D * D * 4.0 * 15 / 1000000000
+    
+    # installed mem is enough
+    if requiredMemGB <= installedMemGB:
+        isEnough = 2
+        
+    # give a warning, will use some paging file and make the computer very slow
+    elif requiredMemGB <= installedMemGB * 1.2:
+        isEnough - 1
+    # not enough
+    else:
+        isEnough - 0
+
+    return isEnough, installedMemGB, requiredMemGB
+                
 class VecModel:
-    def __init__(self, V, vocab, word2id, vecNormalize=True):
+    def __init__(self, V, vocab, word2id, vecNormalize=True, autoPrecomputeGramian=False):
         self.Vorig = V
         self.V = np.array([ x/normF(x) for x in self.Vorig ])
         self.word2id = word2id
@@ -1316,7 +1359,12 @@ class VecModel:
         self.vocab = vocab
         self.iterIndex = 0
         self.cosTable = None
-
+        
+        if autoPrecomputeGramian:
+            isEnough, installedMemGB, requiredMemGB = isMemEnoughGramian( len(V) )
+            if isEnough == 2:
+                self.precomputeGramian()
+            
     def __contains__(self, w):
         return w in self.word2id
 
@@ -1335,7 +1383,7 @@ class VecModel:
         else:
             return self.Vorig[ self.word2id[w] ]
 
-    def precompute_cosine(self):
+    def precomputeGramian(self):
         print "Precompute cosine matrix, will need %.1fGB RAM..." %( len(self.V) * len(self.V) * 4.0 / 1000000000 ),
         self.cosTable = np.dot( self.V, self.V.T )
         print "Done."
