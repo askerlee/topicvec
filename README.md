@@ -1,6 +1,9 @@
 # PSDVec
 Source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (accepted by EMNLP'15) and "PSDVec: Positive Semidefinte Word Embedding" (about the use of this toolset, under review).
 
+#### Update v0.41: Gradient Descent solution:
+```python factorize.py -G 500 -w 120000 top2grams-wiki.txt```
+
 #### Update v0.4: Online block-wise factorization:
 1. Obtain 25000 core embeddings, into _25000-500-EM.vec_:
     * ```python factorize.py -w 25000 top2grams-wiki.txt```  
