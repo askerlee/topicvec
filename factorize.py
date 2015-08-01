@@ -186,9 +186,12 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
         gamma = 1.0 / ( it + 2 )
         Grad = np.dot( (A * Weight), V )
 
-        print "Rate: %f" %(gamma)
+        # limit the norm of the step size to no less than the norm of V, times gamma
+        r = norm1(V)/norm1(Grad)
+            
+        print "Rate: %f" %( r * gamma )
 
-        Vnew = V - gamma * Grad
+        Vnew = V - r * gamma * Grad
         VV = np.dot( Vnew, Vnew.T )
         A = VV - G
 
