@@ -156,16 +156,16 @@ if evalVecExpectation and unigramFilename:
 model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
 
 if precomputeGramian:
-    isEnough, installedMemGB, requiredMemGB = isMemEnoughGramian( len(V) )
+    isEnoughGramian, installedMemGB, requiredMemGB = isMemEnoughGramian( len(V) )
     
-    if isEnough <= 1:
+    if isEnoughGramian <= 1:
         print "WARN: %.1fGB mem detected, %.1fGB mem required to precompute the cosine matrix" %( installedMemGB, requiredMemGB )
-        if isEnough == 0:
+        if isEnoughGramian == 0:
             print "Precomputation of the cosine matrix is disabled automatically."
         else:
             print "In case of memory shortage, you can specify -P to disable"
 
-    if isEnough > 0:
+    if isEnoughGramian > 0:
         model.precomputeGramian()
         
 print

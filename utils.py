@@ -1310,11 +1310,15 @@ def bench(func, N, topEigenNum=0):
 
 # return a flag indicating whether installed mem is enough to computing a D*D dimensional Gramian matrix,
 # plus installed amounts and required amounts of mem
-def isMemEnoughGramian(D):
+# extraVarsRatio: the required mem of other existing variables (as a ratio of the decomposed matrix)
+# e.g. in evaluate.py, only the Gramian (cosine) matrix is present, extraVarsRatio = 0
+# in factorize.py, if there are 4 similar sized matrices other than the Gramian, 
+# then extraVarsRatio=4 may be reasonable
+def isMemEnoughGramian(D, extraVarsRatio=0):
     mem = virtual_memory()
     installedMemGB = round( mem.total * 1.0 / (1<<30) )
     # some overhead for np.array, so not divided by 1024^3
-    requiredMemGB = D * D * 4.0 / 1000000000
+    requiredMemGB = D * D * 4.0 * ( extraVarsRatio + 1 ) / 1000000000
     
     # installed mem is enough
     if requiredMemGB <= installedMemGB:
@@ -1331,11 +1335,17 @@ def isMemEnoughGramian(D):
 
 # return a flag indicating whether installed mem is enough to computing eigendecomposition of a D*D matrix
 # plus installed amounts and required amounts of mem
-def isMemEnoughEigen(D):
+# extraVarsRatio: the required mem of other existing variables (as a ratio of the decomposed matrix)
+# assume eigendecomposition alone takes 10 times of the mem of the decomposed matrix
+# e.g. when only doing eigendecomposition of the matrix is present, extraVarsRatio = 0, allVarsRatio = 10
+# if there are 4 similar sized matrices other than the decomposed matrix, then allVarsRatio = 10 + 4 = 14
+# In factorize.py, when doing eigendecomposition, usually there are at least 5 other matrices of similar sizes
+# so by default extraVarsRatio=5
+def isMemEnoughEigen(D, extraVarsRatio=5):
     mem = virtual_memory()
     installedMemGB = round( mem.total * 1.0 / (1<<30) )
     # 15 is an empirical estimation. when D=30K, it takes around 50GB mem
-    requiredMemGB = D * D * 4.0 * 15 / 1000000000
+    requiredMemGB = D * D * 4.0 * ( extraVarsRatio + 10 ) / 1000000000
     
     # installed mem is enough
     if requiredMemGB <= installedMemGB:
@@ -1351,7 +1361,7 @@ def isMemEnoughEigen(D):
     return isEnough, installedMemGB, requiredMemGB
                 
 class VecModel:
-    def __init__(self, V, vocab, word2id, vecNormalize=True, autoPrecomputeGramian=False):
+    def __init__(self, V, vocab, word2id, vecNormalize=True, precompute_gramian=False):
         self.Vorig = V
         self.V = np.array([ x/normF(x) for x in self.Vorig ])
         self.word2id = word2id
@@ -1360,7 +1370,7 @@ class VecModel:
         self.iterIndex = 0
         self.cosTable = None
         
-        if autoPrecomputeGramian:
+        if precompute_gramian:
             isEnough, installedMemGB, requiredMemGB = isMemEnoughGramian( len(V) )
             if isEnough == 2:
                 self.precomputeGramian()
