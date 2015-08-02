@@ -57,7 +57,7 @@ def norm1(M, Weight=None):
     if Weight is not None:
         for i in xrange( len(M) ):
             # row by row calculation. 
-            # Otherwise a big temporary matrix is needed, which consumes a lot RAM
+            # If doing matrix multiplication, a big temporary matrix will be generated, consuming a lot RAM
             row = np.abs( M[i] * Weight[i] )
             s += np.sum(row)
     else:
@@ -70,26 +70,27 @@ def norm1(M, Weight=None):
 def normF(M, Weight=None):
     if len(M.shape) == 1:
         if Weight is not None:
-            return np.sum( np.abs( M * M * Weight ) )
+            # M*M makes all elems positive, and all elems of Weight are nonnegative. So no need to take abs()
+            return np.sum( M * M * Weight )
         else:
-            return np.sum( np.abs( M * M ) )
+            return np.sum( M * M )
     
     s = 0
     
     if Weight is not None:
         for i in xrange( len(M) ):
             # row by row calculation. 
-            # Otherwise a big temporary matrix is needed, which consumes a lot RAM
-            row = np.abs( M[i] * M[i] * Weight[i] )
+            # If doing matrix multiplication, a big temporary matrix will be generated, consuming a lot RAM
+            row = M[i] * M[i] * Weight[i]
             s += np.sum(row)
     else:
         for i in xrange( len(M) ):
-            row = np.abs( M[i] * M[i] )
+            row = M[i] * M[i]
             s += np.sum(row)
 
     return np.sqrt(s)
 
-# given a list of matrices, return a list of their norms
+# Given a list of matrices, return a list of their norms
 def matSizes( norm, Ms, Weight=None ):
     sizes = []
     for M in Ms:

@@ -170,8 +170,9 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
     G_Weight = G
     VV *= Weight
     norm1_VV = norm1(VV)
-    VV -= G
-    # In this function, A is defined as VV-G
+    VV -= G_Weight
+    # In this function, A is defined as VV-G. 
+    # A * Weight = ( VV - G ) * Weight = VV * Weight - G * Weight
     A_Weight = VV
 
     print "L1 Weighted: VV: %.3f, G-VV: %.3f" %( norm1_VV, norm1(A_Weight) )
@@ -189,6 +190,7 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
         Grad = np.dot( A_Weight, V )
 
         # limit the norm of the step size to no less than the norm of V, times gamma
+        # the gradient still converges to zero, although r is fluctuating
         r = norm1(V)/norm1(Grad)
         if r > 1.0:
             r = 1.0
@@ -659,6 +661,10 @@ def main():
         usage()
         sys.exit(2)
 
+    # if other methods are not specified, do EM training
+    if not do_UniWeight and MAX_FW_ITERS == 0 and MAX_GD_ITERS == 0:
+        MAX_EM_ITERS = 4
+        
     # load testsets
     simTestsetDir = "./testsets/ws/"
     simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
