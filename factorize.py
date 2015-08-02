@@ -7,6 +7,7 @@ import pdb
 from utils import *
 import os
 import glob
+import time
 
 # factorization weighted by unigram probs
 # MAXITERS is not used. Only for API conformity
@@ -224,13 +225,25 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 
 # Weighted factorization by bigram freqs, optimized using EM algorithm
 # if MAXITERS==1, it's identical to nowe_factorize()
-# Weight: nonnegative weight matrix. Assume already normalized
+# Weight: nonnegative weight matrix. Assume it's already normalized
 # N0: desired rank
 def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
 
     timer1 = Timer( "we_factorize_EM()" )
 
     D = len(G)
+
+    isEnoughEigen, installedMemGB, requiredMemGB = isMemEnoughEigen(D)
+    # Not enough RAM
+    if isEnoughEigen == 0:
+        print "%.1fG RAM is required by eigendecomposition, but only %.1fG is installed" %(requiredMemGB, installedMemGB)
+        print "Proceeding may hang your computer. Please reduce the factorized vocab size (-w)"
+        print "You have 10 seconds to stop execution using Ctrl-C:"
+        for i in xrange(10):
+            time.sleep(1)
+            print "\r%d\r" %i,
+        print "Timeout. Proceed anyway"
+        
     isEnoughGramian, installedMemGB, requiredMemGB = isMemEnoughGramian(D, 5)
 
     print "Begin EM of weighted factorization by bigram freqs"
