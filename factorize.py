@@ -139,42 +139,42 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 
     isEnoughGramian, installedMemGB, requiredMemGB = isMemEnoughGramian(D, 5)
     init_with_nowe = True
-    
+
     if init_with_nowe:
         isEnoughEigen, installedMemGB, requiredMemGB = isMemEnoughEigen(D)
         # enough mem, initialize with unweighted low rank approximation
         if isEnoughEigen >= 1:
             # initialize V to unweighted low rank approximation
             V, VV = nowe_factorize(G, N0)
-            # In this function, A is defined as VV-G, i.e. minus the returned A
-            A = VV - G
+
+            if testenv:
+                model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, precompute_gramian=isEnoughGramian )
+                evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
+                if isEnoughGramian:
+                    evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
+                del model
+                
         else:
             print "Not enough RAM: %.1fGB mem detected, %.1fGB mem required." %( installedMemGB, requiredMemGB )
             print "Initialize V randomly"
             V = np.random.rand( D, N0 )
             VV = np.dot( V, V.T )
-            A = VV - G
+
     else:
         print "Initialize V randomly"
         V = np.random.rand( D, N0 )
         VV = np.dot( V, V.T )
-        A = VV - G
 
-    if testenv:
-        model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, precompute_gramian=isEnoughGramian )
-        evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
-        evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
+    # in-place operations to reduce the space of a matrix
+    G *= Weight
+    G_Weight = G
+    VV *= Weight
+    norm1_VV = norm1(VV)
+    VV -= G
+    # In this function, A is defined as VV-G
+    A_Weight = VV
 
-    matSizes1 = matSizes( norm1, [ VV, A ], Weight ) #matSizes( norm1, [VV, Gsym - VV, A], WeightSym ) + \
-
-#    print "L1 SymWeighted: VV: %.3f, Gsym-VV: %.3f, G-VV: %.3f" %tuple( matSizes1[0:3] )
-    print "L1 Weighted: VV: %.3f, G-VV: %.3f" %tuple( matSizes1 )
-
-#    matSizesF = matSizes( normF, [ VV, A ], Weight ) #matSizes( normF, [VV, Gsym - VV, A], WeightSym ) + \
-
-#    print "L2 SymWeighted: VV: %.3f, Gsym-VV: %.3f, G-VV: %.3f" %tuple( matSizesF[0:3] )
-#    print "L2 Weighted: VV: %.3f, G-VV: %.3f" %tuple( matSizesF )
-
+    print "L1 Weighted: VV: %.3f, G-VV: %.3f" %( norm1_VV, norm1(A_Weight) )
     print "\nBegin Gradient Descent of weighted factorization by bigram freqs"
 
     #pdb.set_trace()
@@ -185,44 +185,39 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 
         # step size
         gamma = 1.0 / ( it + 2 )
-        Grad = np.dot( (A * Weight), V )
+        # Grad is D*N0, takes little memory
+        Grad = np.dot( A_Weight, V )
 
         # limit the norm of the step size to no less than the norm of V, times gamma
         r = norm1(V)/norm1(Grad)
         if r > 1.0:
             r = 1.0
-            
+
         print "Rate: %f" %( r * gamma )
 
-        Vnew = V - r * gamma * Grad
-        VV = np.dot( Vnew, Vnew.T )
-        A = VV - G
+        V -= r * gamma * Grad
+        VV = np.dot( V, V.T )
+        VV *= Weight
+        norm1_VV = norm1(VV)
+        VV -= G_Weight
+        A_Weight = VV
 
-        matSizes1 = matSizes( norm1, [VV, A], Weight ) #matSizes( norm1, [VV, Gsym - VV, A], WeightSym ) + \
+        print "L1 Weighted: VV: %.3f, G-VV: %.3f" %( norm1_VV, norm1(A_Weight) )
 
-#       print "L1 SymWeighted: VV: %.3f, Gsym-VV: %.3f, G-VV: %.3f" %tuple( matSizes1[0:3] )
-        print "L1 Weighted: VV: %.3f, G-VV: %.3f" %tuple( matSizes1 )
-
-#        matSizesF = matSizes( normF, [VV, A], Weight ) #matSizes( normF, [VV, Gsym - VV, A], WeightSym ) + \
-
-#       print "L2 SymWeighted: VV: %.3f, Gsym-VV: %.3f, G-VV: %.3f" %tuple( matSizesF[0:3] )
-#        print "L2 Weighted: VV: %.3f, G-VV: %.3f" %tuple( matSizesF )
-
-        V = Vnew
-
-        if testenv and it %5 == 4:
+        if testenv and it % 5 == 4:
             model = VecModel( V, testenv['vocab'], testenv['word2id'], vecNormalize=True, precompute_gramian=isEnoughGramian )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             # evaluate_ana is very slow when we couldn't precomputeGramian()
             # so in this case, only call it every 100 iterations to save training time
             if isEnoughGramian or it % 100 == 99:
                 evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
-
+            del model
+            
         timer2.printElapseTime()
 
     timer1.printElapseTime()
 
-    VV = np.dot( V, V.T ) 
+    VV = np.dot( V, V.T )
     return V, VV
 
 # Weighted factorization by bigram freqs, optimized using EM algorithm
@@ -232,7 +227,7 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
 
     timer1 = Timer( "we_factorize_EM()" )
-    
+
     D = len(G)
     isEnoughGramian, installedMemGB, requiredMemGB = isMemEnoughGramian(D, 5)
 
@@ -560,7 +555,7 @@ def block_factorize( G, F, V1, N0, do_weight_cutoff ):
     del F21, Weight21, Wsum, Gwmean, WGsum, VW
 
     return V2
-    
+
 
 def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv, save_residuals=False ):
     print "%d iterations of %s" %( MAX_ITERS, algName )
@@ -571,7 +566,7 @@ def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv, save_resi
 
     save_embeddings( "%d-%d-%s.vec" %(vocab_size, N0, algName), vocab, V, "V" )
     print
-    
+
     if save_residuals:
         A = G - VV
         save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, algName), vocab, A, "A" )
@@ -612,14 +607,14 @@ def main():
     do_weight_cutoff = True
     extraWordFile = None
     do_UniWeight = False
-    MAX_EM_ITERS = 4
+    MAX_EM_ITERS = 0
     MAX_FW_ITERS = 0
     MAX_GD_ITERS = 0
     # EM iters of the core words
     MAX_CORE_EM_ITERS = 4
     do_block_factorize = False
     save_residuals = False
-    
+
     try:
         opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:cE:F:UG:h")
         if len(args) != 1:
@@ -655,7 +650,7 @@ def main():
                 do_UniWeight = True
             if opt == '-G':
                 MAX_GD_ITERS = int(arg)
-                
+
             if opt == '-h':
                 usage()
                 sys.exit(0)
@@ -689,22 +684,22 @@ def main():
                 sys.exit(2)
             else:
                 noncore_size = vocab_size - core_size
-                
+
         if not pre_vec_file:
             # do_block_factorize might be accidentally enabled by -o. But without -v or -b we couldn't proceed
             if core_size < 0:
                 print "Neither -v nor -b is specified. Unable to determine core words"
                 sys.exit(2)
-                
+
             # passed-in word2preID_core={}
             vocab_all, word2id_all, word2id_core, coreword_preIDs, G, F, u \
                                                           = loadBigramFileInBlock( bigram_filename, core_size,
                                                               noncore_size, {}, {}, kappa )
             # returned coreword_preIDs = []
 
-            # Usually in the bigram file there are many more words than -b core_size 
+            # Usually in the bigram file there are many more words than -b core_size
             # so the actual core words read should always be core_size words. No update needed
-            
+
             G11 = G.pop(0)
             F11 = F.pop(0)
 
@@ -726,7 +721,7 @@ def main():
             vocab_joint = vocab_all
             V_pre_skipped = []
             word2id_joint = word2id_all
-            
+
         else:
             if core_size > 0:
                 print "Embeddings of top %d words in '%s' will be loaded as core" %( core_size, pre_vec_file )
@@ -737,10 +732,10 @@ def main():
             # skippedWords_whatever is empty and we don't care about it
             V_pre, vocab_pre, word2preID, skippedWords_whatever = load_embeddings(pre_vec_file)
             N0 = V_pre.shape[1]
-            
+
             prewords_skipped = {}
             vocab_skipped = []
-            
+
             # recompute core_size, initialize vocab_core & word2preID_core
             # If there are less than core_size words in pre_vec_file, then the whole returned vocab is used as vocab_core
             # the actual core_size is smaller than specified core_size
@@ -749,7 +744,7 @@ def main():
                 vocab_core = vocab_pre
                 word2preID_core = word2preID
             # 0 < core_size <= len(vocab_core)
-            # the first core_size words in vocab_pre are vocab_core 
+            # the first core_size words in vocab_pre are vocab_core
             else:
                 vocab_core = vocab_pre[:core_size]
                 vocab_skipped = vocab_pre[core_size:]
@@ -758,7 +753,7 @@ def main():
                 word2preID_core = {}
                 for w in vocab_core:
                     word2preID_core[w] = word2preID[w]
-                
+
             if noncore_size > 0:
                 print "2 blocks of %d core words and %d noncore words will be loaded. Skip %d words" \
                                 %( core_size, noncore_size, len(prewords_skipped) )
@@ -776,7 +771,7 @@ def main():
             # update core_size to the num of pre core words existing in the bigram file
             core_size = len(word2id_core)
             noncore_size = len(word2id_all) - core_size
-            # select corresponding rows into V1 and V_pre_skipped. 
+            # select corresponding rows into V1 and V_pre_skipped.
             # V1 is some rows within the 0:core_size rows of V_pre, but row order might change
             # other rows are into V_pre_skipped
             V1 = V_pre[coreword_preIDs]
@@ -791,13 +786,13 @@ def main():
             #vocab_joint = vocab_all[:core_size] + vocab_all[core_size:]
             # updated word to ID mapping
             word2id_joint = { w:i for (i, w) in enumerate(vocab_joint) }
-            
+
         # block_factorize( G, F, V1, N0, do_weight_cutoff ):
         V2 = block_factorize( G, F, V1, N0, True )
-        
-        # concatenate vocab's and V's. 
+
+        # concatenate vocab's and V's.
         # A use case:
-        # On an original vocab of [ 1, ..., i1, ..., i2, ..., i3, ... ] 
+        # On an original vocab of [ 1, ..., i1, ..., i2, ..., i3, ... ]
         # 1. Factorize [ 1, ..., i1 ] as cores, and block factorize [ i1+1, ..., i2 ]
         # Save to a vec file.
         # vocab_all = vocab_joint = [ 1, ..., i1, ..., i2, ..., i3 ]
@@ -807,12 +802,12 @@ def main():
         # vocab_all = [ 1, ..., i1, i2+1, ..., i3 ]
         # vocab_skipped = [ i1+1, ..., i2 ]
         # vocab_joint = [ 1, ..., i1, i1+1, ..., i2, i2+1, ..., i3 ]
-        
+
         vocab_jointsize = len(vocab_joint)
         #V_joint = np.concatenate( ( V1, V2 ) )
         V_joint = np.concatenate( ( V1, V_pre_skipped, V2 ) )
         save_embeddings( "%d-%d-%d-%s.vec" %(core_size, vocab_jointsize, N0, "BLKEM"), vocab_joint, V_joint, "V" )
-    
+
         """
         if test_block:
             print "Test EM on the complete matrix\n"
@@ -820,12 +815,12 @@ def main():
             G0 = G[3]
             Weight0 = normalizeWeight( [ F[3] ], do_weight_cutoff )
             print "L1 Weighted VV: %.3f, G-VV: %.3f" %( norm1(VV, Weight0), norm1(G0 - VV, Weight0) )
-    
+
             testenv['word2id'] = testenv['word2id_all']
             we_factorize_EM( G0, Weight0, N0, MAXITERS, testenv )
             print
         """
-    
+
         if testenv:
             testenv['vocab'] = vocab_joint
             testenv['word2id'] = word2id_joint
@@ -834,9 +829,9 @@ def main():
             model = VecModel( V_joint, testenv['vocab'], testenv['word2id'], vecNormalize=True, precompute_gramian=True )
             evaluate_sim( model, testenv['simTestsets'], testenv['simTestsetNames'] )
             evaluate_ana( model, testenv['anaTestsets'], testenv['anaTestsetNames'] )
-    
+
         # never save residuals when doing block factorization
-        
+
     else:
         extraWords = {}
         if extraWordFile:

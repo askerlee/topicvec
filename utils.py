@@ -46,19 +46,46 @@ class Timer(object):
 
 # Weight: nonnegative real matrix. If not specified, return the unweighted norm
 def norm1(M, Weight=None):
+    if len(M.shape) == 1:
+        if Weight is not None:
+            return np.sum( np.abs( M * Weight ) )
+        else:
+            return np.sum( np.abs(M) )
+
+    s = 0
+    
     if Weight is not None:
-        s = np.sum( np.abs( M * Weight ) )
+        for i in xrange( len(M) ):
+            # row by row calculation. 
+            # Otherwise a big temporary matrix is needed, which consumes a lot RAM
+            row = np.abs( M[i] * Weight[i] )
+            s += np.sum(row)
     else:
-        s = np.sum( np.abs(M) )
+        for i in xrange( len(M) ):
+            row = np.abs( M[i] )
+            s += np.sum(row)
 
     return s
 
 def normF(M, Weight=None):
+    if len(M.shape) == 1:
+        if Weight is not None:
+            return np.sum( np.abs( M * M * Weight ) )
+        else:
+            return np.sum( np.abs( M * M ) )
+    
+    s = 0
+    
     if Weight is not None:
-        # M*M: element-wise square
-        s = np.sum( M * M * Weight )
+        for i in xrange( len(M) ):
+            # row by row calculation. 
+            # Otherwise a big temporary matrix is needed, which consumes a lot RAM
+            row = np.abs( M[i] * M[i] * Weight[i] )
+            s += np.sum(row)
     else:
-        s = np.sum( M * M )
+        for i in xrange( len(M) ):
+            row = np.abs( M[i] * M[i] )
+            s += np.sum(row)
 
     return np.sqrt(s)
 
@@ -1345,7 +1372,7 @@ def isMemEnoughEigen(D, extraVarsRatio=5):
     mem = virtual_memory()
     installedMemGB = round( mem.total * 1.0 / (1<<30) )
     # 15 is an empirical estimation. when D=30K, it takes around 50GB mem
-    requiredMemGB = D * D * 4.0 * ( extraVarsRatio + 10 ) / 1000000000
+    requiredMemGB = D * D * 4.0 * ( extraVarsRatio + 8 ) / 1000000000
     
     # installed mem is enough
     if requiredMemGB <= installedMemGB:
