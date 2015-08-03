@@ -24,3 +24,5 @@ Pretrained 120,000 embeddings and evaluation results are uploaded.
 Pretrained 100,000 embeddings and evaluation results are uploaded (_now replaced by an expanded set of 120,000 embeddings_).
 
 Testsets are by courtesy of Omer Levy (https://bitbucket.org/omerlevy/hyperwords/src).
+
+The Gradient Descent algorithm was based on the suggestion of Peilin Zhao.
