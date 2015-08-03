@@ -25,4 +25,4 @@ Pretrained 100,000 embeddings and evaluation results are uploaded (_now replaced
 
 Testsets are by courtesy of Omer Levy (https://bitbucket.org/omerlevy/hyperwords/src).
 
-The Gradient Descent algorithm was based on the suggestion of Peilin Zhao.
+The Gradient Descent algorithm was based on the suggestion of Peilin Zhao (not included as a part of the papers).
