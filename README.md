@@ -2,12 +2,12 @@
 Source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (accepted by EMNLP'15) and "PSDVec: Positive Semidefinte Word Embedding" (about the use of this toolset, under review).
 
 #### Update v0.42: Tikhonov regularization (=Spherical Gaussian Prior) to embeddings in block-wise factorization:
-```python factorize.py -v 25000-500-EM.vec -o 45000 -t0.5 top2grams-wiki.txt```
-
+* ```python factorize.py -v 25000-500-EM.vec -o 45000 -t0.5 top2grams-wiki.txt```
 It usually brings 1~2% boost of accuracy on the testsets.
 
-#### Update v0.41: Gradient Descent solution:
-```python factorize.py -G 500 -w 120000 top2grams-wiki.txt```
+#### Update v0.41: Gradient Descent (GD) solution:
+* ```python factorize.py -G 500 -w 120000 top2grams-wiki.txt```
+GD is fast and scalable, but the performance is much worse (10~20% lower on the testsets). It's not recommended, unless initialized using unweighted Eigendecomposition (which is still not scalable).
 
 #### Update v0.4: Online block-wise factorization:
 1. Obtain 25000 core embeddings, into _25000-500-EM.vec_:
