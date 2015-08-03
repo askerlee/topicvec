@@ -1,16 +1,20 @@
 # PSDVec
 Source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (accepted by EMNLP'15) and "PSDVec: Positive Semidefinte Word Embedding" (about the use of this toolset, under review).
 
+#### Update v0.42: Tikhonov regularization (=Spherical Gaussian Prior) to embeddings in block-wise factorization:
+```python factorize.py -v 25000-500-EM.vec -o 45000 -t0.5 top2grams-wiki.txt```
+It usually brings 1~2% boost of accuracy on the testsets.
+
 #### Update v0.41: Gradient Descent solution:
 ```python factorize.py -G 500 -w 120000 top2grams-wiki.txt```
 
 #### Update v0.4: Online block-wise factorization:
 1. Obtain 25000 core embeddings, into _25000-500-EM.vec_:
     * ```python factorize.py -w 25000 top2grams-wiki.txt```  
-2. Obtain 45000 noncore embeddings, totaling 70000 (25000 core + 45000 noncore), into _25000-70000-500-BLKEM.vec_:
+2. Obtain 45000 noncore embeddings, totaling 70000 (25000 core + 45000 noncore), into _25000-70000-500-BLK-0.0.vec_:
     * ```python factorize.py -v 25000-500-EM.vec -o 45000 top2grams-wiki.txt```
-3. Incrementally learn other 50000 noncore embeddings (based on 25000 core), into _25000-120000-500-BLKEM.vec_:
-    * ```python factorize.py -v 25000-70000-500-BLKEM.vec -b 25000 -o 50000 top2grams-wiki.txt```
+3. Incrementally learn other 50000 noncore embeddings (based on 25000 core), into _25000-120000-500-BLK-0.0.vec_:
+    * ```python factorize.py -v 25000-70000-500-BLK-0.0.vec -b 25000 -o 50000 top2grams-wiki.txt```
 4. Repeat 3 a few times to get more embeddings of rarer words.
 
 Pretrained 120,000 embeddings and evaluation results are uploaded.
