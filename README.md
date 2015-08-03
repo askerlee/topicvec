@@ -10,11 +10,11 @@ Source code for "A Generative Word Embedding Model and its Low Rank Positive Sem
 * GD is fast and scalable, but the performance is much worse (10~20% lower on the testsets). It's not recommended, unless initialized using unweighted Eigendecomposition (which is still not scalable).
 
 #### Update v0.4: Online block-wise factorization:
-1. Obtain 25000 core embeddings, into _25000-500-EM.vec_:
+1. Obtain 25000 core embeddings using Weighted PSD Approximation, into _25000-500-EM.vec_:
     * ```python factorize.py -w 25000 top2grams-wiki.txt```  
-2. Obtain 45000 noncore embeddings, totaling 70000 (25000 core + 45000 noncore), into _25000-70000-500-BLK-0.0.vec_:
+2. Obtain 45000 noncore embeddings using Weighted Least Squares, totaling 70000 (25000 core + 45000 noncore), into _25000-70000-500-BLK-0.0.vec_:
     * ```python factorize.py -v 25000-500-EM.vec -o 45000 top2grams-wiki.txt```
-3. Incrementally learn other 50000 noncore embeddings (based on 25000 core), into _25000-120000-500-BLK-0.0.vec_:
+3. Incrementally learn other 50000 noncore embeddings (based on 25000 cores), into _25000-120000-500-BLK-0.0.vec_:
     * ```python factorize.py -v 25000-70000-500-BLK-0.0.vec -b 25000 -o 50000 top2grams-wiki.txt```
 4. Repeat 3 a few times to get more embeddings of rarer words.
 
