@@ -13,6 +13,9 @@ from psutil import virtual_memory
 memLogger = logging.getLogger("Mem")
 logging.basicConfig( stream=sys.stdout, level=logging.DEBUG )
 
+def warning(*objs):
+    sys.stderr.write(*objs)
+    
 class Timer(object):
     def __init__(self, name=None):
         self.name = name
@@ -71,9 +74,9 @@ def normF(M, Weight=None):
     if len(M.shape) == 1:
         if Weight is not None:
             # M*M makes all elems positive, and all elems of Weight are nonnegative. So no need to take abs()
-            return np.sum( M * M * Weight )
+            return np.sqrt( np.sum( M * M * Weight ) )
         else:
-            return np.sum( M * M )
+            return np.sqrt( np.sum( M * M ) )
     
     s = 0
     
@@ -190,7 +193,8 @@ def save_embeddings( filename, vocab, V, matrixName ):
 # load top maxWordCount words, plus extraWords
 def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
     FMAT = open(filename)
-    print "Load embedding text file '%s'" %(filename)
+    warning( "Load embedding text file '%s'\n" %(filename) )
+    
     V = []
     word2id = {}
     skippedWords = {}
@@ -213,11 +217,10 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
         else:
             maxWordCount = vocab_size
 
-        print "Will load %d words" %maxWordCount,
+        warning( "Will load embeddings of %d words" %maxWordCount )
         if len(extraWords) > 0:
-            print "\b, plus %d extra words" %(len(extraWords))
-        else:
-            print
+            warning( ", plus %d extra words" %(len(extraWords)) )
+        warning("\n")
 
         # maxWordCount + len(extraWords) is the maximum num of words.
         # V may contain extra rows that will be removed at the end
@@ -256,21 +259,21 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
                 wid += 1
 
             if orig_wid % 1000 == 0:
-                print "\r%d    %d    %d    \r" %( orig_wid, wid, len(extraWords) ),
+                warning( "\r%d    %d    %d    \r" %( orig_wid, wid, len(extraWords) ) )
 
             if orig_wid > vocab_size:
                 raise ValueError( "%d words declared in header, but more are read" %(vocab_size) )
 
     except ValueError, e:
         if len( e.args ) == 2:
-            print "Unknown line %d:\n%s" %( e.args[0], e.args[1] )
+            warning( "Unknown line %d:\n%s\n" %( e.args[0], e.args[1] ) )
         else:
             exc_type, exc_obj, tb = sys.exc_info()
-            print "Source line %d - %s on File line %d:\n%s" %( tb.tb_lineno, e, lineno, line )
+            warning( "Source line %d - %s on File line %d:\n%s\n" %( tb.tb_lineno, e, lineno, line ) )
         exit(2)
 
     FMAT.close()
-    print "\n%d embeddings read, %d kept" %(orig_wid, wid)
+    warning( "\n%d embeddings read, %d kept\n" %(orig_wid, wid) )
 
     #pdb.set_trace()
 
@@ -299,7 +302,7 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
         else:
             maxWordCount = vocab_size
 
-        print "Will load %d words" %maxWordCount,
+        print "Will load embeddings of %d words" %maxWordCount,
         if len(extraWords) > 0:
             print "\b, plus %d extra words" %(len(extraWords))
         else:
@@ -1391,7 +1394,7 @@ def isMemEnoughEigen(D, extraVarsRatio=5):
 class VecModel:
     def __init__(self, V, vocab, word2id, vecNormalize=True, precompute_gramian=False):
         self.Vorig = V
-        self.V = np.array([ x/normF(x) for x in self.Vorig ])
+        self.V = np.array( [ x / normF(x) for x in self.Vorig ], dtype=np.float32 )
         self.word2id = word2id
         self.vecNormalize = vecNormalize
         self.vocab = vocab

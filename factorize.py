@@ -512,7 +512,10 @@ def normalizeWeight( RawCounts, do_weight_cutoff, cutQuantile=0.0002, zero_diago
     else:
         return RawCounts
 
-def block_factorize( G, F, V1, N0, do_weight_cutoff ):
+# tikhonovCoeff: coefficient of Tikhonov regularization on the weighted least squares
+# Set to 0 to disable regularization
+# https://en.wikipedia.org/wiki/Tikhonov_regularization#Generalized_Tikhonov_regularization
+def block_factorize( G, F, V1, N0, tikhonovCoeff, do_weight_cutoff ):
     # new G12, G21, F12, F21, allocated in loadBigramFileInBlock() and passed in
     # core_size * noncore_size, noncore_size * core_size
     G12, G21 = G
@@ -542,6 +545,7 @@ def block_factorize( G, F, V1, N0, do_weight_cutoff ):
     # embeddings of noncore words
     # new V2: noncore_size * N0
     V2 = np.zeros( ( noncore_size, N0 ), dtype=np.float32 )
+    Tikhonov = np.identity(N0) * tikhonovCoeff
 
     timer = Timer()
 
@@ -555,7 +559,8 @@ def block_factorize( G, F, V1, N0, do_weight_cutoff ):
         VW = V1.T * wi
         # new VWV: N0 * N0
         VWV = VW.dot(V1)
-        V2[i] = np.linalg.inv(VWV).dot( VW.dot(Gwmean[i]) )
+        VWV_T = VWV + Tikhonov
+        V2[i] = np.linalg.inv(VWV_T).dot( VW.dot(Gwmean[i]) )
         if i >= 0 and i % 100 == 99:
             print "\r%d / %d." %(i+1,noncore_size),
             print timer.getElapseTime(), "\r",
@@ -608,6 +613,9 @@ Options:
 def main():
     # degree of smoothing
     kappa = 0.02
+    # tikhonovCoeff: coefficient of Tikhonov regularization on the weighted least squares in block_factorize()
+    # default is to disable it
+    tikhonovCoeff = 0
     # vector dimensionality
     N0 = 500
 
@@ -631,7 +639,7 @@ def main():
     save_residuals = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:cE:F:UG:h")
+        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:t:cE:F:UG:h")
         if len(args) != 1:
             raise getopt.GetoptError("")
         bigram_filename = args[0]
@@ -653,6 +661,8 @@ def main():
                 extraWordFile = arg
             if opt == '-k':
                 kappa = float(arg) / 100
+            if opt == '-t':
+                tikhonovCoeff = float(arg)
             if opt == '-c':
                 do_weight_cutoff = False
             if opt == '-E':
@@ -807,7 +817,7 @@ def main():
             word2id_joint = { w:i for (i, w) in enumerate(vocab_joint) }
 
         # block_factorize( G, F, V1, N0, do_weight_cutoff ):
-        V2 = block_factorize( G, F, V1, N0, True )
+        V2 = block_factorize( G, F, V1, N0, tikhonovCoeff, True )
 
         # concatenate vocab's and V's.
         # A use case:
@@ -825,7 +835,7 @@ def main():
         vocab_jointsize = len(vocab_joint)
         #V_joint = np.concatenate( ( V1, V2 ) )
         V_joint = np.concatenate( ( V1, V_pre_skipped, V2 ) )
-        save_embeddings( "%d-%d-%d-%s.vec" %(core_size, vocab_jointsize, N0, "BLKEM"), vocab_joint, V_joint, "V" )
+        save_embeddings( "%d-%d-%d-%s-%.1f.vec" %(core_size, vocab_jointsize, N0, "BLK", tikhonovCoeff), vocab_joint, V_joint, "V" )
 
         """
         if test_block:
