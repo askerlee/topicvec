@@ -3,6 +3,7 @@ Source code for "A Generative Word Embedding Model and its Low Rank Positive Sem
 
 #### Update v0.42: Tikhonov regularization (=Spherical Gaussian Prior) to embeddings in block-wise factorization:
 ```python factorize.py -v 25000-500-EM.vec -o 45000 -t0.5 top2grams-wiki.txt```
+
 It usually brings 1~2% boost of accuracy on the testsets.
 
 #### Update v0.41: Gradient Descent solution:
