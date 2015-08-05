@@ -11,7 +11,9 @@ import time
 
 # factorization weighted by unigram probs
 # MAXITERS is not used. Only for API conformity
-def uniwe_factorize(G, u, N0, MAXITERS=0, testenv=None):
+# tikhonovCoeff: coefficient of Tikhonov regularization on the unigram prob-weighted least squares
+# Not implemented yet
+def uniwe_factorize(G, u, N0, MAXITERS=0, tikhonovCoeff=0, testenv=None):
     timer = Timer( "uniwe_factorize()" )
     print "Begin factorization weighted by unigrams"
 
@@ -80,7 +82,8 @@ def uniwe_factorize(G, u, N0, MAXITERS=0, testenv=None):
 
 # Factorization without weighting
 # N: dimension of factorization
-def nowe_factorize(G, N):
+# tikhonovCoeff: coefficient of Tikhonov regularization on the unweighted least squares
+def nowe_factorize(G, N, tikhonovCoeff=0):
     timer = Timer( "nowe_factorize()" )
     print "Begin unweighted factorization"
 
@@ -116,6 +119,11 @@ def nowe_factorize(G, N):
     es_N = np.array( es_N, dtype=np.float32 )
     print "All eigen sum: %.3f, Kept eigen sum: %.3f" %( norm1(es), norm1(es_N) )
 
+    if tikhonovCoeff > 0:
+        scale = 1.0 / ( 1 + tikhonovCoeff )
+        es_N *= scale
+        print "Regularized kept eigen sum: %.3f" %( norm1(es_N) )
+        
     es_N_sqrt = np.diag( np.sqrt(es_N) )
     # remove all-zero columns
     es_N_sqrt = es_N_sqrt[ :, np.flatnonzero( es_N > 0 ) ]
@@ -133,7 +141,8 @@ def nowe_factorize(G, N):
 # Weighted factorization by bigram freqs, optimized using Gradient Descent algorithm
 # Weight: nonnegative weight matrix. Assume already normalized
 # N0: desired rank of V
-def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
+# tikhonovCoeff: coefficient of Tikhonov regularization. Not implemented yet
+def we_factorize_GD(G, Weight, N0, MAXITERS=5000, tikhonovCoeff=0, testenv=None):
     timer1 = Timer( "we_factorize_GD()" )
     # D is the number of words in the vocab (W in the paper)
     D = len(G)
@@ -227,7 +236,8 @@ def we_factorize_GD(G, Weight, N0, MAXITERS=5000, testenv=None):
 # if MAXITERS==1, it's identical to nowe_factorize()
 # Weight: nonnegative weight matrix. Assume it's already normalized
 # N0: desired rank
-def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
+# tikhonovCoeff: coefficient of Tikhonov regularization on the weighted least squares using EM
+def we_factorize_EM(G, Weight, N0, MAXITERS=5, tikhonovCoeff=0, testenv=None):
 
     timer1 = Timer( "we_factorize_EM()" )
 
@@ -253,6 +263,7 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
     # X: low rank rep in the M step
     X = alpha * G
 
+    # N is N0 plus the iteration number. Decrease 1 after each iteration
     N = min( N0 + MAXITERS - 1, len(G) )
 
     #pdb.set_trace()
@@ -262,7 +273,7 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
         print "\nEM Iter %d:" %(it+1)
 
         Gi = Weight * G + (1 - Weight) * X
-        V, VV = nowe_factorize(Gi, N)
+        V, VV = nowe_factorize( Gi, N, tikhonovCoeff )
 
         # reduce the rank by one in every iteration
         if N > N0:
@@ -289,7 +300,8 @@ def we_factorize_EM(G, Weight, N0, MAXITERS=5, testenv=None):
 # Weighted factorization by bigram freqs, optimized using Frank-Wolfe algorithm
 # Weight: nonnegative weight matrix. Assume already normalized
 # N0: desired rank of V
-def we_factorize_FW(G, Weight, N0, MAXITERS=6, testenv=None):
+# tikhonovCoeff: coefficient of Tikhonov regularization. Not implemented yet
+def we_factorize_FW(G, Weight, N0, MAXITERS=6, tikhonovCoeff=0, testenv=None):
 
     timer1 = Timer( "we_factorize_FW()" )
 
@@ -559,8 +571,8 @@ def block_factorize( G, F, V1, N0, tikhonovCoeff, do_weight_cutoff ):
         VW = V1.T * wi
         # new VWV: N0 * N0
         VWV = VW.dot(V1)
-        VWV_T = VWV + Tikhonov
-        V2[i] = np.linalg.inv(VWV_T).dot( VW.dot(Gwmean[i]) )
+        VWV_Tik = VWV + Tikhonov
+        V2[i] = np.linalg.inv(VWV_Tik).dot( VW.dot(Gwmean[i]) )
         if i >= 0 and i % 100 == 99:
             print "\r%d / %d." %(i+1,noncore_size),
             print timer.getElapseTime(), "\r",
@@ -577,9 +589,9 @@ def block_factorize( G, F, V1, N0, tikhonovCoeff, do_weight_cutoff ):
     return V2
 
 
-def factorize( alg, algName, G, Weight, N0, MAX_ITERS, vocab, testenv, save_residuals=False ):
+def factorize( alg, algName, G, Weight, N0, MAX_ITERS, tikhonovCoeff, vocab, testenv, save_residuals=False ):
     print "%d iterations of %s" %( MAX_ITERS, algName )
-    V, VV = alg( G, Weight, N0, MAX_ITERS, testenv )
+    V, VV = alg( G, Weight, N0, MAX_ITERS, tikhonovCoeff, testenv )
     print
 
     vocab_size = len(vocab)
@@ -604,6 +616,9 @@ Options:
   -e:  A file containing extra words to generate embeddings, even if beyond
        the top words specified by -w
   -k:  Kappa of Jelinek-Mercer Smoothing (in percent). Default: 2 (=0.02)
+  -t:  Specify a Tikhonov regularization coefficient. Default: 0 (disable)
+  -c:  Disable weight cutoff
+  -z:  Set G's elements to 0 whose corresponding weights are 0
   -E:  Number of iterations of the EM procedure. Default: 4
   -F:  Use Frank-Wolfe procedure, and specify the number of iterations
   -U:  Use PSD approximation with Unigram weighting
@@ -628,6 +643,8 @@ def main():
 
     do_smoothing = True
     do_weight_cutoff = True
+    zero_G_elem_at_weight_0 = False
+    
     extraWordFile = None
     do_UniWeight = False
     MAX_EM_ITERS = 0
@@ -639,7 +656,7 @@ def main():
     save_residuals = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:t:cE:F:UG:h")
+        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:t:czE:F:UG:h")
         if len(args) != 1:
             raise getopt.GetoptError("")
         bigram_filename = args[0]
@@ -663,8 +680,11 @@ def main():
                 kappa = float(arg) / 100
             if opt == '-t':
                 tikhonovCoeff = float(arg)
+                print "Using Tikhonov regularization with coeff: %.1f" %tikhonovCoeff
             if opt == '-c':
                 do_weight_cutoff = False
+            if opt == '-z':
+                zero_G_elem_at_weight_0 = True
             if opt == '-E':
                 MAX_EM_ITERS = int(arg)
                 MAX_CORE_EM_ITERS = int(arg)
@@ -877,20 +897,29 @@ def main():
         # Weight modifies F in place. Memory copy is avoided
         Weight = normalizeWeight( [ F ], do_weight_cutoff=do_weight_cutoff )
 
+        if zero_G_elem_at_weight_0:
+            NonzeroFilter = Weight != 0
+            G *= NonzeroFilter
+            nonzeroCount = np.count_nonzero(NonzeroFilter)
+            totalCount = G.shape[0] * G.shape[1]
+            zeroCount = totalCount - nonzeroCount
+            print "%d (%.1f%%) nonzero elements in G are set to 0, %d left" \
+                            %( zeroCount, zeroCount * 100.0 / totalCount, nonzeroCount )
+            
         #we_factorize_GD( G, Weight, N0, testenv )
 
-        # factorize( alg, algName, G, Weight, N, MAX_ITERS, vocab, testenv )
+        # factorize( alg, algName, G, Weight, N, MAX_ITERS, tikhonovCoeff, vocab, testenv )
         if do_UniWeight:
-            factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, testenv, save_residuals )
+            factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, 0, testenv, save_residuals )
 
         if MAX_FW_ITERS > 0:
-            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_FW_ITERS, vocab, testenv, save_residuals )
+            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_FW_ITERS, 0, vocab, testenv, save_residuals )
 
         if MAX_GD_ITERS > 0:
-            factorize( we_factorize_GD, "GD", G, Weight, N0, MAX_GD_ITERS, vocab, testenv, save_residuals )
+            factorize( we_factorize_GD, "GD", G, Weight, N0, MAX_GD_ITERS, 0, vocab, testenv, save_residuals )
 
         if MAX_EM_ITERS > 0:
-            factorize( we_factorize_EM, "EM", G, Weight, N0, MAX_EM_ITERS, vocab, testenv, save_residuals )
+            factorize( we_factorize_EM, "EM", G, Weight, N0, MAX_EM_ITERS, tikhonovCoeff, vocab, testenv, save_residuals )
 
 
 
