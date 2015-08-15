@@ -9,7 +9,12 @@ if len(sys.argv) == 1:
     sys.exit(1)
     
 embeddingFilename = sys.argv[1]
-V, vocab, word2id, skippedWords = load_embeddings(embeddingFilename)
+if len(sys.argv) == 3:
+    topWordNum = int(sys.argv[2])
+else:
+    topWordNum = -1
+        
+V, vocab, word2id, skippedWords = load_embeddings( embeddingFilename, topWordNum )
 warning("\nCompute norms...")
 
 word2norm = {}
@@ -24,7 +29,7 @@ warning("Done\n")
 embeddingFilename = os.path.basename(embeddingFilename)
 embeddingFilename = os.path.splitext(embeddingFilename)[0]
 
-normFilename = "norms_" + embeddingFilename + ".txt"
+normFilename = "norms_" + embeddingFilename + "-%d.txt" %( len(V) )
 
 warning( "Save norms into %s\n" %normFilename )
 NORM = open(normFilename, "w")
