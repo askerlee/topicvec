@@ -21,6 +21,7 @@ warning("Done\nSorting words ascendingly by norm...")
 sorted_wordnorms = sorted( word2norm.items(), key=operator.itemgetter(1) )
 warning("Done\n")
 
+embeddingFilename = os.path.basename(embeddingFilename)
 embeddingFilename = os.path.splitext(embeddingFilename)[0]
 
 normFilename = "norms_" + embeddingFilename + ".txt"

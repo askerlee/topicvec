@@ -160,6 +160,8 @@ def power_iter(M):
     return eigen, vec
 
 # each column of vs is an eigenvector
+# It's a prerequisite that all eigenvalues are already nonnegative
+# This requirement is guaranteed after nowe_factorize()
 def lowrank_fact(VV, N0):
     timer1 = Timer( "lowrank_fact()" )
 
@@ -167,7 +169,7 @@ def lowrank_fact(VV, N0):
     es = es[-N0:]
     vs = vs[ :, -N0: ]
     E_sqrt = np.diag( np.sqrt(es) )
-    V = vs.dot(E_sqrt.T)
+    V = vs.dot(E_sqrt)
     VV = V.dot(V.T)
 
     return V, VV, vs,es
@@ -191,7 +193,7 @@ def save_embeddings( filename, vocab, V, matrixName ):
     FMAT.close()
 
 # load top maxWordCount words, plus extraWords
-def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
+def load_embeddings( filename, maxWordCount=-1, extraWords={}, record_skipped=False ):
     FMAT = open(filename)
     warning( "Load embedding text file '%s'\n" %(filename) )
     
@@ -246,10 +248,12 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
                 isInterested = True
             elif orig_wid < maxWordCount:
                 isInterested = True
-            else:
+            elif record_skipped:
                 isInterested = False
                 skippedWords[w] = 1
-
+            else:
+                break
+							
             orig_wid += 1
 
             if isInterested:
@@ -285,7 +289,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={} ):
 
 # borrowed from gensim.models.word2vec
 # load top maxWordCount words, plus extraWords
-def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
+def load_embeddings_bin( filename, maxWordCount=-1, extraWords={}, record_skipped=False ):
     print "Load embedding binary file '%s'" %(filename)
     word2id = {}
     vocab = []
@@ -343,9 +347,11 @@ def load_embeddings_bin( filename, maxWordCount=-1, extraWords={} ):
                 isInterested = True
             elif orig_wid < maxWordCount:
                 isInterested = True
-            else:
+            elif record_skipped:
                 isInterested = False
                 skippedWords[w] = 1
+            else:
+                break
 
             orig_wid += 1
 
