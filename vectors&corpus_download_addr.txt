@@ -1,0 +1,4 @@
+On Dropbox:
+1) Pretrained 180000 embeddings (25000 cores) in 3 archives, 
+2) RCV1 cleansed corpus: ( before downloading, please apply for permission from NIST according to: http://trec.nist.gov/data/reuters/reuters.html )
+https://www.dropbox.com/sh/lqbk3iioobegbp8/AACc8Kfr1KZIkKl9bGaIrOjfa?dl=0
