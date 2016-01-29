@@ -1,0 +1,36 @@
+Though virtual reality is still far from mainstream, 2015 was a big year for the industry as new headsets were introduced¡ªsome full-featured and powerful, some simple and portable¡ªand companies announced new ways to control and capture VR imagery, too. Throughout the year, investors poured money into companies developing the technology, content creators figured out how to make everything from films to advertisements in VR, and millions of Americans experienced virtual-reality technology for the very first time.   
+
+With all that happened, it can be hard to sift out what¡¯s most important. We cut through the virtual noise to bring you the six most significant events in virtual reality this year.
+
+1. HTC and Valve show off the Vive VR headset
+
+In March, smartphone maker HTC and video-game company Valve Software pulled back the curtains on their collaborative virtual-reality effort, the Vive headset. Vive has a tracking system that uses lasers to keep an eye on your location within a space as large as 15 by 15 feet, making it possible to roam around while using the headset. The Vive is slated for commercial release in April.
+
+2. Oculus unveils its first consumer headset, Rift, and Oculus Touch hand controllers
+
+In June, Facebook-owned Oculus trotted out its first consumer headset, Rift, and a pair of half-moon, button-bedecked controllers, both of which it plans to release next year (see ¡°Oculus Shows Its First Consumer Headset, Circular Hand Controls¡±).
+
+The matte black headset has two OLED displays, a wide field of view, and a speaker over each ear; it will need to physically connect to a powerful computer, along with a separate sensor that tracks the user¡¯s motions. The controls, meanwhile, enable hand gestures like dragging objects, pointing, and waving.
+
+The company hasn¡¯t publicly stated a specific release date for the headset, though it has said it will come in the first quarter of 2016. The hand controls are slated for release in the second quarter.
+
+3. Microsoft shows off speedy progress with HoloLens, its holographic headset
+
+Microsoft¡¯s HoloLens, which is more correctly referred to as augmented reality than virtual reality since it is intended to blend 3-D virtual visuals with the real world, debuted in January. At the time, Microsoft invited a number of reporters to try out HoloLens, which it hopes could eventually be used to do things like play games and work on 3-D models. While Microsoft presented it as a sort of futuristic set of ski goggles, reporters were only able to test a much clunkier version that was still tethered to a stationary computer, and required a so-called holographic processing unit worn around the neck.
+
+But at the company¡¯s Build developer conference in May, Microsoft let reporters try out a fully self-contained prototype version of the device that looked much more polished (see ¡°Microsoft Making Fast Progress with HoloLens¡±). This prototype gave a much better sense of the hard work required to fit a lot of technology into a compact, good-looking, untethered head-mounted display. It¡¯s not clear when HoloLens will be released to the public; Microsoft has only said that a $3,000 developer edition will begin shipping early next year.
+
+4. Cameras envision new ways to film virtual reality
+
+At Google¡¯s I/O developer conference in June, the company announced a new kind of camera for taking live-action 3-D virtual-reality videos. Called Jump, it includes 16 cameras in a circular array, making it possible to capture each point from three perspectives; software can then convert the footage into 3-D. Google released the Jump design for free, and GoPro started selling a fully assembled version of the device late this year.
+
+Also this year, photography startup Lytro¡ªwhich has struggled to popularize its camera for consumers that lets you refocus images after taking them¡ªsaid in November that it¡¯s working on a spherical camera for capturing live-action 3-D films for virtual reality, too (see ¡°Lytro Is Building a Camera to Capture Live-Action Virtual Reality¡±).
+
+
+5. Google Cardboard goes out to New York Times Sunday print subscribers
+
+In November, the New York Times sent over a million Google Cardboard virtual-reality kits to its subscribers to promote its virtual-reality documentary ¡°The Displaced,¡± which details what happens to children displaced by war. Though Google Cardboard¡ªa foldable, handheld virtual-reality headset with plastic lenses that users must slip a smartphone into to power it¡ªwas introduced back in 2014, this move brought a simple, immersive experience into many more homes  (see ¡°Google Aims to Make VR Hardware Irrelevant Before it Even Gets Going¡±).
+
+6. Samsung starts selling its new Gear VR
+
+Also in November, Samsung released the latest version of its Gear VR headset, a $100 headset developed with Oculus that uses a Samsung smartphone as its computer and display. The newest Gear VR costs half as much as its predecessor did when it came out in 2014, and supports more of Samsung¡¯s smartphones (the Galaxy Note 5, Galaxy S6, Galaxy S6 Edge, and Galaxy S6 Edge+). It still lacks important functions like positional tracking, which means games and other VR experiences can¡¯t track your head movements, but it shows Samsung and Oculus are serious about marrying virtual reality and mobile devices.

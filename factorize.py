@@ -601,7 +601,7 @@ def factorize( alg, algName, G, Weight, N0, MAX_ITERS, tikhonovCoeff, vocab, tes
 
     if save_residuals:
         A = G - VV
-        save_embeddings( "%d-%d-%s.residue" %(vocab_size, N0, algName), vocab, A, "A" )
+        save_embeddings( "%d-%d-%s.residual" %(vocab_size, N0, algName), vocab, A, "A" )
         print
 
 def usage():
@@ -618,7 +618,9 @@ Options:
   -k:  Kappa of Jelinek-Mercer Smoothing (in percent). Default: 2 (=0.02)
   -t:  Specify a Tikhonov regularization coefficient. Default: 0 (disable)
   -c:  Disable weight cutoff
-  -z:  Set G's elements to 0 whose corresponding weights are 0
+  -z:  Set G's elements to 0 whose corresponding weights are 0. 
+       At the same time, set the default magnitude of vectors. Default: 8
+       Diagonal of G will be set to the square of the default magnitude
   -E:  Number of iterations of the EM procedure. Default: 4
   -F:  Use Frank-Wolfe procedure, and specify the number of iterations
   -U:  Use PSD approximation with Unigram weighting
@@ -633,7 +635,8 @@ def main():
     tikhonovCoeff = 0
     # vector dimensionality
     N0 = 500
-
+    default_vec_len = 8
+    
     # default -1 means to read all words
     vocab_size = -1
     core_size = -1
@@ -647,7 +650,7 @@ def main():
     
     extraWordFile = None
     do_UniWeight = False
-    MAX_EM_ITERS = 0
+    MAX_EM_ITERS = 4
     MAX_FW_ITERS = 0
     MAX_GD_ITERS = 0
     # EM iters of the core words
@@ -656,7 +659,7 @@ def main():
     save_residuals = False
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:t:czE:F:UG:h")
+        opts, args = getopt.getopt(sys.argv[1:],"n:b:v:o:w:e:k:t:cz:E:F:UG:hr")
         if len(args) != 1:
             raise getopt.GetoptError("")
         bigram_filename = args[0]
@@ -685,6 +688,7 @@ def main():
                 do_weight_cutoff = False
             if opt == '-z':
                 zero_G_elem_at_weight_0 = True
+                default_vec_len = float(arg)
             if opt == '-E':
                 MAX_EM_ITERS = int(arg)
                 MAX_CORE_EM_ITERS = int(arg)
@@ -695,7 +699,8 @@ def main():
                 do_UniWeight = True
             if opt == '-G':
                 MAX_GD_ITERS = int(arg)
-
+            if opt == '-r':
+                save_residuals = True
             if opt == '-h':
                 usage()
                 sys.exit(0)
@@ -704,10 +709,6 @@ def main():
         usage()
         sys.exit(2)
 
-    # if other methods are not specified, do EM training
-    if not do_UniWeight and MAX_FW_ITERS == 0 and MAX_GD_ITERS == 0:
-        MAX_EM_ITERS = 4
-        
     # load testsets
     simTestsetDir = "./testsets/ws/"
     simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
@@ -906,17 +907,22 @@ def main():
             print "%d (%.1f%%) nonzero elements in G are set to 0, %d left" \
                             %( zeroCount, zeroCount * 100.0 / totalCount, nonzeroCount )
             
+            default_vec_len_sqr = default_vec_len * default_vec_len
+            for i in xrange( G.shape[0] ):
+                G[i,i] = default_vec_len_sqr
+            print "Diagnoal elements of G are set to %.1f" %( default_vec_len_sqr )
+            
         #we_factorize_GD( G, Weight, N0, testenv )
 
         # factorize( alg, algName, G, Weight, N, MAX_ITERS, tikhonovCoeff, vocab, testenv )
-        if do_UniWeight:
-            factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, 0, testenv, save_residuals )
+        #if do_UniWeight:
+        #    factorize( uniwe_factorize, "UNI", G, u, N0, 0, vocab, 0, testenv, save_residuals )
 
-        if MAX_FW_ITERS > 0:
-            factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_FW_ITERS, 0, vocab, testenv, save_residuals )
+        #if MAX_FW_ITERS > 0:
+        #    factorize( we_factorize_FW, "FW", G, Weight, N0, MAX_FW_ITERS, 0, vocab, testenv, save_residuals )
 
-        if MAX_GD_ITERS > 0:
-            factorize( we_factorize_GD, "GD", G, Weight, N0, MAX_GD_ITERS, 0, vocab, testenv, save_residuals )
+        #if MAX_GD_ITERS > 0:
+        #    factorize( we_factorize_GD, "GD", G, Weight, N0, MAX_GD_ITERS, 0, vocab, testenv, save_residuals )
 
         if MAX_EM_ITERS > 0:
             factorize( we_factorize_EM, "EM", G, Weight, N0, MAX_EM_ITERS, tikhonovCoeff, vocab, testenv, save_residuals )
@@ -924,4 +930,5 @@ def main():
 
 
 if __name__ == '__main__':
+    memLogger = initConsoleLogger("Mem")
     main()

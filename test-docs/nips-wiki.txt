@@ -1,0 +1,26 @@
+Conference on Neural Information Processing Systems
+Abbreviation	NIPS
+Discipline	Machine learning, statistics, artificial intelligence, computational neuroscience
+Publication details
+History	1987¨C
+Frequency	Annual
+Website	https://nips.cc/
+The Conference and Workshop on Neural Information Processing Systems (NIPS) is a machine learning and computational neuroscience conference held every December. The conference is a single track meeting that includes invited talks as well as oral and poster presentations of refereed papers, followed by parallel-track workshops that up to 2013 were held at ski resorts. According to Microsoft Academic Search, NIPS is the top conference on machine learning.1
+
+Contents hide
+1	History
+2	Topics
+3	The NIPS Experiment
+4	Editions
+5	See also
+6	External links
+7	Notes
+History
+NIPS began in 1987 as a connectionist neural networks conference, and was held in Denver, United States until 2000. Since then, the conference has been held in Vancouver, Canada (2001-2010), Granada, Spain (2011), and Lake Tahoe, United States (2012-2013). In 2014, the conference was held in Montreal, Canada.
+The NIPS Conference is organized by the NIPS Foundation, which was founded by Ed Posner in 1987. Terrence Sejnowski has been the President of the NIPS Foundation since 1993, when Ed had a tragic bicycle accident. The Board of Trustees consists of previous General Chairs of the NIPS Conference.
+Papers in early NIPS proceedings tended to use neural networks as a tool for understanding how the human brain works, which attracted researchers with interests in biological learning systems as well as those interested in artificial learning systems. Since then, the biological and artificial systems research streams have diverged, and recent NIPS proceedings are dominated by papers on machine learning, artificial intelligence and statistics, although computational neuroscience remains an aspect of the conference.
+The proceedings from the conferences have been published in book form by Morgan Kaufmann (1987-1993), MIT Press (1994-2004) and Curran Associates (2005-2013) under the name Advances in Neural Information Processing Systems. Papers from all NIPS conferences are available at http://papers.nips.cc/. NIPS tutorials and conference presentations from 2013 are at http://nips.cc/Conferences/2013/Videos/.
+Topics
+The conference continues to span a wide range of topics and continues to grow, with over 2,500 registered participants in 2014. Besides machine learning and neuroscience, other fields represented at NIPS include cognitive science, psychology, computer vision, statistical linguistics, and information theory. Although the 'Neural' in the NIPS acronym was something of a historical relic, the recent resurgence of deep learning in neural networks, which has a wide range of practical applications in speech recognition, object recognition, natural language processing and brain imaging, has revived the initial impetus for the conference.
+The NIPS Experiment
+In NIPS 2014, the program chairs decided to duplicate 10% of all submissions and send them through separate reviewers to evaluate randomness in the reviewing process.2 Several researchers interpreted the result.34 In response to the question whether the decision in NIPS is completely random or not, John Langford writes: "Clearly not¡ªa purely random decision would have arbitrariness of ~78%. It is, however, quite notable that 60% is much closer to 78% than 0%." He concludes that the result of the reviewing process is mostly arbitrary. 5

@@ -175,7 +175,7 @@ sub processFile
     		if( $options{c} ){
 			    # if no filtering, each line is a sentence. So $. == $sentenceCount.
 			    # no need to display $.
-                if( $sentenceCount % 500 == 0 ){
+                if( $sentenceCount % 5000 == 0 ){
                     printf( "\r%d, %.1fM\r", $sentenceCount, $filesize / (1024*1024) );
                 }
                 processSentence_($sentence);
@@ -184,7 +184,7 @@ sub processFile
     		
     		# old Perl code
 			if( ! $options{nofilter} ){
-                if( $sentenceCount % 500 == 0 ){
+                if( $sentenceCount % 5000 == 0 ){
                     printf( "\r%d, %d, %.1fM\r", $., $sentenceCount, $filesize / (1024*1024) );
                 }
                 #$sentence =~ s/\'//g;
@@ -197,7 +197,7 @@ sub processFile
     		else{
 			    # if no filtering, each line is a sentence. So $. == $sentenceCount.
 			    # no need to display $.
-                if( $sentenceCount % 500 == 0 ){
+                if( $sentenceCount % 5000 == 0 ){
                     printf( "\r%d, %.1fM\r", $sentenceCount, $filesize / (1024*1024) );
                 }
     		    @words = split / /, $sentence;
@@ -381,6 +381,8 @@ sub outputTopUnigrams
 	print "Done.\n";
 }
 
+# This code is buggy. Should remove interest words with freq <= min1gramfreq
+# Please use C++ implementation instead
 sub outputTopBigrams
 {
 	my $topbigramFilename = shift;

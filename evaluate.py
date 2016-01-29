@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import getopt
 import glob
 import sys
@@ -16,7 +18,8 @@ modelID = -1
 # default is current directory
 simTestsetDir = "./testsets/ws/"
 # if set to [], run all testsets
-simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", "simlex_999a" ]
+simTestsetNames = [ "ws353_similarity", "ws353_relatedness", "bruni_men", "radinsky_mturk", "luong_rare", 
+                        "simlex_999a", "EN-RG-65" ]
 anaTestsetDir = "./testsets/analogy/"
 # if set to [], run all testsets
 anaTestsetNames = [ "google", "msr" ]
@@ -32,8 +35,12 @@ isModelBinary = False
 modelFile = None
 # precompute the cosine similarity matrix of all pairs of words
 # need W*W*4 bytes of RAM
-precomputeGramian = True
+precomputeGramian = False
 skipPossessive = False
+evalVecExpectation = False
+doAnaTest = True
+isHyperwordsEmbed = False
+hyperEmbedType = None
 
 def usage():
     print """Usage: evaluate.py [ -m model_file -i builtin_model_id -e extra_word_file -a absent_file -u unigram_file ... ]
@@ -54,10 +61,12 @@ Options:
          whose IDs are below it will be picked out
   -e:    Extra word file. Words in this list will be loaded anyway
   -a:    Absent file. Words below the cut point will be saved there
-  -p:    Skip possessive analogy pairs"""
+  -p:    Skip possessive analogy pairs
+  -E:    Compute the expectation of all word embeddings
+  -H:    Hyperwords embeddings type: PPMI or SVD."""
   
 try:
-    opts, args = getopt.getopt(sys.argv[1:],"m:bd:f:i:Pu:c:t:e:a:sh")
+    opts, args = getopt.getopt(sys.argv[1:],"m:bd:f:i:Pu:c:t:e:a:shEAH:")
     if len(args) != 0:
         raise getopt.GetoptError("")
     for opt, arg in opts:
@@ -87,8 +96,15 @@ try:
         if opt == '-a':
             getAbsentWords = True
             absentFilename = arg
+        if opt == '-A':
+            doAnaTest = False
         if opt == '-s':
             skipPossessive = True
+        if opt == '-E':
+            evalVecExpectation = True
+        if opt == '-H':
+            isHyperwordsEmbed = True
+            hyperEmbedType = arg
         if opt == '-h':
             usage()
             sys.exit(0)
@@ -126,34 +142,59 @@ if loadwordCutPoint > 0:
 
 if isModelBinary:
     V, vocab2, word2dim, skippedWords = load_embeddings_bin( modelFile, loadwordCutPoint, extraWords )
-else:
+elif not isHyperwordsEmbed:
     V, vocab2, word2dim, skippedWords =     load_embeddings( modelFile, loadwordCutPoint, extraWords )
+else:
+    model = load_embeddings_hyper( modelFile, hyperEmbedType )
+    # the interface of hyperwords embedding class is incompatible with analogy tasks
+    # only compatible with similarity tasks
+    doAnaTest = False
 
 # if evalVecExpectation = True, compute the expectation of all embeddings
-evalVecExpectation = False
-if evalVecExpectation and unigramFilename:
-    expVec = np.zeros( len(V[0]) )
-    expVecNorm1 = 0
-    expVecNorm2 = 0
-    totalWords = 0
-    expWords = 0
-    accumProb = 0.0
-    for w in vocab2:
-        totalWords += 1
-        if w in vocab:
-            expVec += V[ word2dim[w] ] * vocab[w][2]
-            expVecNorm1 += norm1( V[ word2dim[w] ] ) * vocab[w][2]
-            expVecNorm2 += normF( V[ word2dim[w] ] ) * vocab[w][2]
-            expWords += 1
-            accumProb += vocab[w][2]
+if evalVecExpectation:
+    if unigramFilename:
+        expVec = np.zeros( len(V[0]) )
+        expVecNorm1 = 0
+        expVecNorm2 = 0
+        totalWords = 0
+        expWords = 0
+        accumProb = 0.0
+        for w in vocab2:
+            totalWords += 1
+            if w in vocab and vocab[w][0] < 180000:
+                expVec += V[ word2dim[w] ] * vocab[w][2]
+                expVecNorm1 += norm1( V[ word2dim[w] ] ) * vocab[w][2]
+                expVecNorm2 += normF( V[ word2dim[w] ] ) * vocab[w][2]
+                expWords += 1
+                accumProb += vocab[w][2]
+    
+        expVec /= accumProb
+        expVecNorm1 /= accumProb
+        expVecNorm2 /= accumProb
+        print "totally %d words, %d words in E[v]. Accumu prob: %.2f%%." %( totalWords, expWords, accumProb * 100 )
+        print "|E[v]|: %.2f/%.2f, E[|v|]: %.2f/%.2f" %( norm1(expVec), normF(expVec), expVecNorm1, expVecNorm2 )
 
-    expVec /= accumProb
-    expVecNorm1 /= accumProb
-    expVecNorm2 /= accumProb
-    print "totally %d words, %d words in E[v]. |E[v]|: %.3f/%.3f, E[|v|]: %.3f/%.3f" %( totalWords, expWords,
-                                                                norm1(expVec), normF(expVec), expVecNorm1, expVecNorm2 )
+        expMagnitude = norm1(expVec)
+        accumProb = 0
+        variance = 0
+        for w in vocab2:
+            if w in vocab and vocab[w][0] < 180000:
+                variance += ( norm1( V[ word2dim[w] ] ) - expMagnitude )**2 * vocab[w][2]
+                accumProb += vocab[w][2]
+        
+        variance /= accumProb
+        
+        # variance & standard deviation
+        print "var(|v|): %.2f. SD: %.2f. CV: %.2f" %( variance, np.sqrt(variance), np.sqrt(variance) / expVecNorm1 )
+                                                                                                
+        sys.exit(0)
+        
+    else:
+        print "ERR: -u (Unigram file) has to be specified to calc expectation of embeddings"
+        sys.exit(2)
 
-model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
+if not isHyperwordsEmbed:        
+    model = VecModel(V, vocab2, word2dim, vecNormalize=vecNormalize)
 
 if precomputeGramian:
     isEnoughGramian, installedMemGB, requiredMemGB = isMemEnoughGramian( len(V) )
@@ -184,7 +225,8 @@ spearmanCoeff, absentModelID2Word1, absentVocabWords1, cutVocabWords1 = \
 
 print
 
-anaScores,     absentModelID2Word2, absentVocabWords2, cutVocabWords2 = \
+if doAnaTest:
+    anaScores,     absentModelID2Word2, absentVocabWords2, cutVocabWords2 = \
             evaluate_ana( model, anaTestsets, anaTestsetNames, getAbsentWords, vocab, testwordCutPoint )
 
 if getAbsentWords:
