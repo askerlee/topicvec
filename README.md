@@ -1,5 +1,5 @@
-# PSDVec
-Source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (accepted by EMNLP'15) and "PSDVec: Positive Semidefinte Word Embedding" (about the use of this toolset, under review).
+# TopicVec & PSDVec
+PSDVec is the source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (accepted by EMNLP'15).
 
 #### Update v0.6: Code for Topic Embedding:
 ##### Algorithm update: 
