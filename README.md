@@ -1,10 +1,17 @@
 # PSDVec
 Source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (accepted by EMNLP'15) and "PSDVec: Positive Semidefinte Word Embedding" (about the use of this toolset, under review).
 
+#### Update v0.6: Code for Topic Embedding:
+##### Algorithm update: 
+topicvecDir.py: uses exact inference instead a second-order approximation in the M-step.
+> topicvecMLE.py is removed.
+
 #### Update v0.5: Code for Topic Embedding:
 ##### Two algorithms: 
 1. topicvecDir.py (preferred): uses a Dirichlet prior for topic mixting proportions.
-2. topicvecMLE.py: No prior, uses MLE to estimate topic mixting proportions.
+
+2. topicvecMLE.py is now REMOVED: 
+```topicvecMLE.py: No prior, uses MLE to estimate topic mixting proportions.```
 
 #### Update v0.42: Tikhonov Regularization (=Spherical Gaussian Prior) to embeddings in block-wise factorization:
 1. Obtain 25000 core embeddings using Weighted PSD Approximation, into _25000-500-EM.vec_:
@@ -23,8 +30,6 @@ Pretrained 180,000 embeddings and evaluation results are uploaded. Now the perfo
 * GD is fast and scalable, but the performance is much worse (~10% lower on the testsets). It's not recommended, unless initialized using unweighted Eigendecomposition (which is still not scalable).
 
 #### Update v0.4: Online Block-wise Factorization
-
-#### Update v0.3: Block-wise Factorization
 
 Testsets are by courtesy of Omer Levy (https://bitbucket.org/omerlevy/hyperwords/src).
 

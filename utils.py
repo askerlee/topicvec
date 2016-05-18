@@ -12,34 +12,34 @@ import glob
 import logging
 from psutil import virtual_memory
 import os.path
+import random
 
 logging.basicConfig( level=logging.DEBUG )
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
-stopwordStr = '''a about above across after again against almost alone along also
+stopwordStr = '''a about above across after again against all almost alone along also
 although always am among an and another any anybody anyone anything
 apart are around as  at away be because been before behind being below
 besides between beyond both but by can cannot could  did do does doing done
 down  during each either else enough etc  ever every everybody
-everyone except far few for  from get gets got had  has have having
-her here herself him himself his how however if in indeed instead into
-is it its itself just kept  maybe might  more most mostly much must
-myself  neither  no nobody none nor not nothing  of off often on
+everyone except far few for  from get gets got had has have having
+he her here herself him himself his how however if in indeed instead into
+is it its itself just kept me maybe might  more most mostly much must
+my myself  neither  no nobody none nor not nothing  of off often on one
 only onto or other others ought our ours out  own  please
 pp quite rather really said seem  shall she should since so
 some somebody somewhat still such than that the their theirs them themselves
 then there therefore these they this thorough thoroughly those through thus to
 together too toward towards until up upon was we well were what
 whatever when whenever where whether which while who whom whose why will with
-within would yet your yourself
+within would yet you your yourself
 re d ll m ve t s'''
 
-stopwordList = re.split( "\s+", stopwordStr )
-stopwordDict = {}
-for w in stopwordList:
-    stopwordDict[w] = 1
+stopwordDict = str2dict(stopwordStr)
 
+np.seterr(all="raise")
+np.set_printoptions(suppress=True, threshold=np.nan, precision=3)
 
 def initConsoleLogger(loggerName):
     consoleLogger = logging.getLogger(loggerName)
@@ -47,13 +47,22 @@ def initConsoleLogger(loggerName):
     consoleLogger.addHandler(streamHandler)  
     return consoleLogger
     
-def initFileLogger(loggerName, filename=None):
+def initFileLogger(loggerName, isAppending=False):
     loggerName = os.path.splitext(loggerName)[0]
-    if filename == None:
-        filename = loggerName + ".log"
-        
+    currDate = timeToStr( time.time(), "%m.%d" )
+    filename = "%s-%s.log" %( loggerName, currDate )
+    sn = 0
+    while os.path.isfile(filename):
+        sn += 1
+        filename = "%s-%s-%d.log" %( loggerName, currDate, sn )
+  
     fileLogger = logging.getLogger(loggerName)
-    fileHandler = logging.FileHandler(filename, mode='a')
+    if isAppending:
+        mode = 'a'
+    else:
+        mode = 'w'
+        
+    fileHandler = logging.FileHandler(filename, mode=mode)
     fileLogger.addHandler(fileHandler)
     return fileLogger
     
@@ -91,6 +100,17 @@ class Timer(object):
     def printElapseTime(self):
         print self.getElapseTime()
 
+def timeToStr(timeNum, fmt="%H:%M:%S"):
+    timeStr = time.strftime(fmt, time.localtime(timeNum))
+    return timeStr
+
+def str2dict(s):
+    wordlist = re.split( "\s+", s )
+    worddict = {}    
+    for w in wordlist:
+        worddict[w] = 1
+    return worddict
+        
 # Weight: nonnegative real matrix. If not specified, return the unweighted norm
 def norm1(M, Weight=None):
     if len(M.shape) == 1:
@@ -279,6 +299,99 @@ def save_embeddings( filename, vocab, V, matrixName ):
 
     FMAT.close()
 
+def save_matrix_as_text( filename, rowTypeName, T, *extraCols, **kwargs ):
+    FMAT = open(filename, "wb")
+    print "Save %s matrix into '%s'" %(rowTypeName, filename)
+    colSep = kwargs.get("colSep", " ")
+    
+    K, N = T.shape
+
+    #pdb.set_trace()
+    extraColNum = len(extraCols)
+    
+    FMAT.write( "%d %d %d\n" %( K, N, extraColNum ) )
+    for i in xrange(K):
+        # if rowNames is provided, print the corresponding row name at the beginning of each line
+        line = ""
+        for j in xrange(extraColNum):
+            col = str( extraCols[j][i] )
+            line += col + colSep
+        line += "%.5f" %T[i,0]
+            
+        for j in xrange(1, N):
+            line += " %.5f" %T[i,j]
+        FMAT.write("%s\n" %line)
+
+    FMAT.close()
+    print "%d rows of %s(s) (%d-d each) saved" %( K, rowTypeName, N )
+
+def load_matrix_from_text( filename, rowTypeName, colSep=" " ):
+    FMAT = open(filename)
+    print "Load %s matrix from '%s'" %(rowTypeName, filename)
+    precision = np.float64
+    extraCols = []
+    extraColNum = 0
+    lineno = 0
+    
+    try:
+        header = FMAT.readline()
+        rowID = 0
+        lineno += 1
+        match = re.match( r"(\d+) (\d+) (\d+)", header)
+        if not match:
+            raise ValueError(lineno, header)
+
+        K = int(match.group(1))
+        N = int(match.group(2))
+        extraColNum = int(match.group(3))
+        print "'%s': %dx%d, %d extra columns" %( filename, K, N, extraColNum )
+        
+        for i in xrange(extraColNum):
+            extraCols.append([])
+        
+        M = np.zeros( (K, N), dtype=precision )
+
+        for line in FMAT:
+            line = line.strip()
+            # end of file
+            if not line:
+                if rowID != K:
+                    raise ValueError( lineno, "%d rows declared in header, but %d read" %( K, rowID ) )
+                break
+
+            row_extraCols = []
+            fields = line.split(colSep)
+            for i in xrange(extraColNum):
+                extraCols[i].append(fields[i])
+                
+            matFields = fields[extraColNum:]
+            # matrix values are always concatenated by " "
+            # if colSep is not " ", matrix values should take one column
+            if colSep != " ":
+                if len(matFields) > 1:
+                    raise ValueError( lineno, "%d columns of matrix values when colSep is not space" %( len(matFields) ) )
+                else:
+                    matFields = matFields[0].split(" ")
+                    
+            M[rowID] = np.array( [ float(x) for x in matFields ], dtype=precision )
+            rowID += 1
+                
+    except ValueError, e:
+        if len( e.args ) == 2:
+            warning( "Unknown line %d:\n%s\n" %( e.args[0], e.args[1] ) )
+        else:
+            exc_type, exc_obj, tb = sys.exc_info()
+            warning( "Source line %d - %s on File line %d:\n%s\n" %( tb.tb_lineno, e, lineno, line ) )
+        exit(2)
+
+    FMAT.close()
+    warning( "%dx%d %s matrix loaded from '%s'\n" %(K, N, rowTypeName, filename) )
+
+    if len(extraCols) == 0:
+        return M
+    else:
+        return M, extraCols
+        
 # load top maxWordCount words, plus extraWords
 def load_embeddings( filename, maxWordCount=-1, extraWords={}, record_skipped=False ):
     FMAT = open(filename)
@@ -327,7 +440,7 @@ def load_embeddings( filename, maxWordCount=-1, extraWords={}, record_skipped=Fa
                 break
 
             fields = line.split(' ')
-            # remove empty fields?
+            # remove empty fields
             fields = filter( lambda x: x, fields )
             w = fields[0]
 
@@ -576,7 +689,7 @@ def loadBigramFile( bigram_filename, topWordNum, extraWords, kappa=0.01 ):
     try:
         header = BIGRAM.readline()
         lineno += 1
-        match = re.match( r"# (\d+) words, \d+ occurrences", header )
+        match = re.match( r"#\s+(\d+) words,\s+\d+ occurrences", header )
         if not match:
             raise ValueError(lineno, header)
 
@@ -591,7 +704,7 @@ def loadBigramFile( bigram_filename, topWordNum, extraWords, kappa=0.01 ):
         header = BIGRAM.readline()
         lineno += 2
 
-        match = re.match( r"# (\d+) bigram occurrences", header)
+        match = re.match( r"#\s+(\d+) bigram occurrences", header)
         if not match:
             raise ValueError(lineno, header)
 
@@ -831,7 +944,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
     try:
         header = BIGRAM.readline()
         lineno += 1
-        match = re.match( r"# (\d+) words, \d+ occurrences", header )
+        match = re.match( r"#\s+(\d+) words,\s+\d+ occurrences", header )
         if not match:
             raise ValueError(lineno, header)
 
@@ -869,7 +982,7 @@ def loadBigramFileInBlock( bigram_filename, core_size, noncore_size=-1, word2pre
         header = BIGRAM.readline()
         lineno += 2
 
-        match = re.match( r"# (\d+) bigram occurrences", header )
+        match = re.match( r"#\s+(\d+) bigram occurrences", header )
         if not match:
             raise ValueError(lineno, header)
 
@@ -1590,7 +1703,7 @@ def isMemEnoughEigen(D, extraVarsRatio=5):
 
     return isEnough, installedMemGB, requiredMemGB
 
-def extractSentenceWords(doc, min_length=2):
+def extractSentenceWords(doc, min_length=1):
     sentences = re.split( r"\s*[,;:`\"()?!{}]\s*|--+|\s*-\s+|''|\.\s|\.$|\.\.+|¡°|¡±", doc ) #"
     wc = 0
     wordsInSentences = []
@@ -1614,6 +1727,13 @@ def extractSentenceWords(doc, min_length=2):
 
     #print "%d words extracted" %wc
     return wordsInSentences, wc
+                            
+def randomsample( X, n ):
+    """ random.sample of the rows of X
+        X may be sparse -- best csr
+    """
+    sampleix = random.sample( xrange( X.shape[0] ), int(n) )
+    return X[sampleix]
                             
 class VecModel:
     def __init__(self, V, vocab, word2id, vecNormalize=True, precompute_gramian=False):
