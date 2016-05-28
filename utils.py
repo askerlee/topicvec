@@ -13,10 +13,19 @@ import logging
 from psutil import virtual_memory
 import os.path
 import random
+import unicodedata
+import sys
+
+unicode_punc_tbl = dict.fromkeys( i for i in xrange(128, sys.maxunicode)
+                      if unicodedata.category(unichr(i)).startswith('P') )
 
 logging.basicConfig( level=logging.DEBUG )
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
+
+def str2dict(s):
+    wordlist = re.split( "\s+", s )
+    return dict.fromkeys(wordlist, 1)
 
 stopwordStr = '''a about above across after again against all almost alone along also
 although always am among an and another any anybody anyone anything
@@ -104,13 +113,6 @@ def timeToStr(timeNum, fmt="%H:%M:%S"):
     timeStr = time.strftime(fmt, time.localtime(timeNum))
     return timeStr
 
-def str2dict(s):
-    wordlist = re.split( "\s+", s )
-    worddict = {}    
-    for w in wordlist:
-        worddict[w] = 1
-    return worddict
-        
 # Weight: nonnegative real matrix. If not specified, return the unweighted norm
 def norm1(M, Weight=None):
     if len(M.shape) == 1:
@@ -1703,7 +1705,25 @@ def isMemEnoughEigen(D, extraVarsRatio=5):
 
     return isEnough, installedMemGB, requiredMemGB
 
-def extractSentenceWords(doc, min_length=1):
+def extractSentenceWords(doc, remove_url=True, remove_punc="utf-8", min_length=1):
+    if remove_punc:
+        # ensure doc_u is in unicode
+        if not isinstance(doc, unicode):
+            encoding = remove_punc
+            doc_u = doc.decode(encoding)
+        else:
+            doc_u = doc
+        # remove unicode punctuation marks, keep ascii punctuation marks
+        doc_u = doc_u.translate(unicode_punc_tbl)
+        if not isinstance(doc, unicode):
+            doc = doc_u.encode(encoding)
+        else:
+            doc = doc_u
+            
+    if remove_url:
+        re_url = r"(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)"
+        doc = re.sub( re_url, "", doc )
+            
     sentences = re.split( r"\s*[,;:`\"()?!{}]\s*|--+|\s*-\s+|''|\.\s|\.$|\.\.+|¡°|¡±", doc ) #"
     wc = 0
     wordsInSentences = []
@@ -1715,8 +1735,6 @@ def extractSentenceWords(doc, min_length=1):
         if not re.search( "[A-Za-z0-9]", sentence ):
             continue
 
-        sentence = sentence.replace("¡¯", "'")
-        
         words = re.split( r"\s+\+|^\+|\+?[\-*\/&%=<>\[\]~\|\@\$]+\+?|\'\s+|\'s\s+|\'s$|\s+\'|^\'|\'$|\$|\\|\s+", sentence )
 
         words = filter( lambda w: w, words )

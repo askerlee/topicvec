@@ -1,5 +1,6 @@
 # TopicVec & PSDVec
-PSDVec is the source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (EMNLP'15).
+TopicVec is the source code for "Generative Topic Embedding: a Continuous Representation of Documents" (ACL 2016).
+PSDVec is the source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (EMNLP 2015).
 
 #### Update v0.6: Code for Topic Embedding:
 ##### Algorithm update: 
