@@ -567,7 +567,7 @@ def block_factorize( G, F, V1, N0, tikhonovCoeff, do_weight_cutoff ):
     for i in xrange(noncore_size):
         # core_size
         wi = Wsum[i]
-        # new VW: core_size * N0
+        # new VW: N0 * core_size
         VW = V1.T * wi
         # new VWV: N0 * N0
         VWV = VW.dot(V1)
