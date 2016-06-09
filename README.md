@@ -1,37 +1,15 @@
-# TopicVec & PSDVec
+# TopicVec
 TopicVec is the source code for "Generative Topic Embedding: a Continuous Representation of Documents" (ACL 2016).
-PSDVec is the source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (EMNLP 2015).
 
-#### Update v0.6: Code for Topic Embedding:
+PSDVec (in folder 'psdvec') is the source code for "A Generative Word Embedding Model and its Low Rank Positive Semidefinite Solution" (EMNLP 2015).
+
+#### Update v0.7: 
+The topic inference is now 6 times faster.
+
+#### Update v0.6:
 ##### Algorithm update: 
 topicvecDir.py: uses exact inference instead a second-order approximation in the M-step.
-> topicvecMLE.py is removed.
 
-#### Update v0.5: Code for Topic Embedding:
-##### Two algorithms: 
-1. topicvecDir.py (preferred): uses a Dirichlet prior for topic mixting proportions.
-
-2. topicvecMLE.py is now REMOVED: 
-```topicvecMLE.py: No prior, uses MLE to estimate topic mixting proportions.```
-
-#### Update v0.42: Tikhonov Regularization (=Spherical Gaussian Prior) to embeddings in block-wise factorization:
-1. Obtain 25000 core embeddings using Weighted PSD Approximation, into _25000-500-EM.vec_:
-    * ```python factorize.py -w 25000 top2grams-wiki.txt```  
-2. Obtain 45000 noncore embeddings using Weighted Least Squares, totaling 80000 (25000 cores + 55000 noncores), into _25000-80000-500-BLK-2.0.vec_:
-    * ```python factorize.py -v 25000-500-EM.vec -o 55000 -t2 top2grams-wiki.txt```
-3. Incrementally learn other 50000 noncore embeddings (based on 25000 cores), into _25000-130000-500-BLK-4.0.vec_:
-    * ```python factorize.py -v 25000-80000-500-BLK-2.0.vec -b 25000 -o 50000 -t4 top2grams-wiki.txt```
-4. Repeat 3 again, with Tikhonov coeff = 8 to get more embeddings of rarer words, into _25000-180000-500-BLK-8.0.vec_:
-    * ```python factorize.py -v 25000-130000-500-BLK-4.0.vec -b 25000 -o 50000 -t8 top2grams-wiki.txt```
-
-Pretrained 180,000 embeddings and evaluation results are uploaded. Now the performance is systematically better than other methods.
-
-#### Update v0.41: Gradient Descent (GD) solution:
-* ```python factorize.py -G 500 -w 120000 top2grams-wiki.txt```
-* GD is fast and scalable, but the performance is much worse (~10% lower on the testsets). It's not recommended, unless initialized using unweighted Eigendecomposition (which is still not scalable).
-
-#### Update v0.4: Online Block-wise Factorization
-
-Testsets are by courtesy of Omer Levy (https://bitbucket.org/omerlevy/hyperwords/src).
-
-The Gradient Descent algorithm was based on the suggestion of Peilin Zhao (not included as a part of the papers).
+#### Update v0.5:
+##### Main algorithm: 
+topicvecDir.py: uses a Dirichlet prior for topic mixting proportions.

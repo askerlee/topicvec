@@ -17,10 +17,12 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
                 # set it to 0 to disable the removal of very small topics
                 topTopicMassFracThres = 0.05,
                 N0 = 500,
-                max_l = 3,
+                max_l = 7,
                 init_l = 1,
-                max_grad_norm = 0, #1.5,
-                # cap the sum of Em when updating topic embeddings
+                # cap the norm of the gradient of topics to avoid too big gradients
+                max_grad_norm = 5,
+                Mstep_sample_topwords = 25000,
+                # normalize by the sum of Em when updating topic embeddings
                 # to avoid too big gradients
                 grad_scale_Em_base = 10000,
                 topW = 12,
@@ -40,7 +42,7 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
                 verbose = 0,
                 seed = 0,
                 printTopic_iterNum = 10,
-                calcSum_pi_v_iterNum = 5,
+                calcSum_pi_v_iterNum = 1,
                 VStep_iterNum = 5
             )
 

@@ -56,6 +56,7 @@ class topicvecDir:
         #self.big_theta_step_ratio = kwargs.get( 'big_theta_step_ratio', 2 )
 
         self.useDrdtApprox = kwargs.get( 'useDrdtApprox', False )
+        self.Mstep_sample_topwords = kwargs.get( 'Mstep_sample_topwords', 0 )
         self.normalize_vecs = kwargs.get( 'normalize_vecs', False )
         self.rebase_vecs = kwargs.get( 'rebase_vecs', False )
         self.rebase_norm_thres = kwargs.get( 'rebase_norm_thres', 0 )
@@ -98,17 +99,29 @@ class topicvecDir:
         self.N0 = self.V.shape[1]
         # number of all words
         self.vocab_size = self.V.shape[0]
-
+            
         # set unigram probs
         self.u = np.zeros(self.vocab_size)
         for wid,w in enumerate(self.vocab):
             self.u[wid] = self.vocab_dict[w][2]
             vocab_dict2[w] = wid
 
-        #self.useLocalU = kwargs.get( 'useLocalU', False )
         self.u = normalize(self.u)
         self.vocab_dict = vocab_dict2
 
+        # u2 is the top "Mstep_sample_topwords" words of u, 
+        # used for a sampling inference (i.e. only the most 
+        # important "Mstep_sample_topwords" words are used) in the M-step
+        # if Mstep_sample_topwords == 0, sampling is disabled
+        if self.Mstep_sample_topwords == 0:
+            self.Mstep_sample_topwords = self.vocab_size
+            self.u2 = self.u
+            self.V2 = self.V
+        else:
+            self.u2 = self.u[:self.Mstep_sample_topwords]
+            self.u2 = normalize(self.u2)
+            self.V2 = self.V[:self.Mstep_sample_topwords]
+            
         customStopwordList = re.split( r"\s+", self.customStopwords )
         for stop_w in customStopwordList:
             stopwordDict[stop_w] = 1
@@ -146,17 +159,18 @@ class topicvecDir:
             self.alpha[0] = self.alpha0
         # K rows of Ev
         # EV: K x N0
-        self.EV = np.tile( self.Ev, (self.K, 1) )
+        if self.useDrdtApprox:
+            self.EV = np.tile( self.Ev, (self.K, 1) )
 
     def precompute(self):
-        print "Precompute vector Ev"
-        self.Ev = np.dot(self.u, self.V)
         print "Precompute matrix u_V"
         # each elem of u multiplies each row of V
-        # Pw_V: vocab_size x N0
-        self.Pw_V = self.u[:, np.newaxis] * self.V
+        # Pw_V: Mstep_sample_topwords x N0
+        self.Pw_V = self.u2[:, np.newaxis] * self.V2
 
         if self.useDrdtApprox:
+            print "Precompute vector Ev"
+            self.Ev = np.dot(self.u, self.V)
             print "Precompute matrix Evv...",
             self.Evv = np.zeros( (self.N0, self.N0) )
             for wid in xrange(self.vocab_size):
@@ -266,18 +280,14 @@ class topicvecDir:
     # T is fed as an argument to provide more flexibility
     def calcTopicResiduals(self, T):
         # VT_{i,j} = v_wi' t_j
-        VT = np.dot(self.V, T.T)
+        VT = np.dot(self.V2, T.T)
 
         # expVT_{i,j} = exp(v_wi' t_j)
         # used in the computation of drdt
-        # expVT: vocab_size x K
+        # expVT: Mstep_sample_topwords x K
         self.expVT = np.exp(VT)
 
-        ## Local empirical unigram prob performs very poorly. Don't use
-        #if self.useLocalU:
-        #    r = -np.log( np.dot(self.local_u, expVT) )
-
-        r = -np.log( np.dot(self.u, self.expVT) )
+        r = -np.log( np.dot(self.u2, self.expVT) )
 
         return r
 
@@ -319,9 +329,12 @@ class topicvecDir:
         diffMat = self.sum_pi_v - Em_drdT
         diffMat *= self.delta * grad_scale
         
-        for k in xrange( len(diffMat) ):
-            if self.max_grad_norm > 0 and np.linalg.norm(diffMat[k]) > self.max_grad_norm:
-                diffMat[k] *= self.max_grad_norm / np.linalg.norm(diffMat[k])
+        maxTStep = np.max( np.linalg.norm( diffMat, axis=1 ) )
+        #if self.it >= 50:
+        #    pdb.set_trace()
+            
+        if self.max_grad_norm > 0 and maxTStep > self.max_grad_norm:
+            diffMat *= self.max_grad_norm / maxTStep
         T2 = self.T + diffMat
 
         maxTStep = np.max( np.linalg.norm( diffMat, axis=1 ) )
@@ -348,10 +361,11 @@ class topicvecDir:
         for d in xrange(self.D):
             Pi = self.docs_Pi[d]
             wids = self.docs_wids[d]
-            L = self.docs_L[d]
-            for i in xrange(L):
-                self.sum_pi_v += np.outer( Pi[i], self.V[ wids[i] ] )
-
+            #L = self.docs_L[d]
+            #for i in xrange(L):
+            #    self.sum_pi_v += np.outer( Pi[i], self.V[ wids[i] ] )
+            self.sum_pi_v += np.dot( Pi.T, self.V[wids] )
+            
     # the returned outputter always output to the log file
     # screenVerboseThres controls when the generated outputter will output to screen
     # when self.verbose >= screenVerboseThres, screen output is enabled
@@ -484,10 +498,11 @@ class topicvecDir:
             if np.linalg.norm( self.T[k] ) == 0:
                 continue
 
-            V_topic_dot = np.dot( self.V, self.T[k] )
-            V_topic_sim = V_topic_dot / np.linalg.norm( self.V, axis=1 ) / np.linalg.norm( self.T[k] )
+            V_topic_dot = np.dot( self.V2, self.T[k] )
+            V_topic_sim = V_topic_dot / np.linalg.norm( self.V2, axis=1 ) / np.linalg.norm( self.T[k] )
 
-            wid_sorted = sorted( range(W), key=lambda wid: V_topic_sim[wid], reverse=True )
+            wid_sorted = sorted( xrange(self.Mstep_sample_topwords), 
+                                key=lambda wid: V_topic_sim[wid], reverse=True )
 
             out("Most similar words in vocab:")
 
@@ -783,7 +798,9 @@ class topicvecDir:
                 self.updateTheta()
                 self.docs_Pi = self.updatePi( self.docs_theta )
 
-            # calcSum_pi_v() takes long time, so only does it once a few iters
+            # calcSum_pi_v() takes a long time on a large corpus
+            # so it can be done once every a few iters, with slight loss of performance
+            # on 20news and reuters, calcSum_pi_v() is fast enough and this acceleration is not necessary
             if self.it <= 5 or self.it == self.MAX_EM_ITERS or self.it % self.calcSum_pi_v_iterNum == 0:
                 self.calcSum_pi_v()
 
