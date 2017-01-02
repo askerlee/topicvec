@@ -14,8 +14,8 @@ topicvecDir.py: uses exact inference instead a second-order approximation in the
 ##### Main algorithm: 
 topicvecDir.py: uses a Dirichlet prior for topic mixting proportions.
 
-#####Required files on Dropbox:
+####Required files on Dropbox:
+https://www.dropbox.com/sh/lqbk3iioobegbp8/AACc8Kfr1KZIkKl9bGaIrOjfa?dl=0
 1. Pretrained 180000 embeddings (25000 cores) in 3 archives. For faster loading into Python, 25000-180000-500-BLK-8.0.vec.npy can be used;
 2. Unigram files top1grams-wiki.txt & top1grams-reuters.txt;
-3. RCV1 cleansed corpus: ( before downloading, please apply for permission from NIST according to: http://trec.nist.gov/data/reuters/reuters.html )
-https://www.dropbox.com/sh/lqbk3iioobegbp8/AACc8Kfr1KZIkKl9bGaIrOjfa?dl=0
+3. RCV1 cleansed corpus ( before downloading, please apply for permission from NIST according to: http://trec.nist.gov/data/reuters/reuters.html ).
