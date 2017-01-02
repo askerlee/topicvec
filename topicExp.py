@@ -8,8 +8,8 @@ from topicvecDir import topicvecDir
 
 config = dict(  unigramFilename = "top1grams-wiki.txt",
                 word_vec_file = "25000-180000-500-BLK-8.0.vec",
-                #word_vec_file = "25000-500-EM.vec",
-                #word_vec_file = "7929-400-EM.vec",
+                #word_vec_file = "embeddings/wiki/word2vec.vec",
+                load_embedding_word_count = 180000,
                 K = 100,
                 # for separate category training, each category has 10 topics, totalling 200
                 sepK_20news = 15,
@@ -17,14 +17,14 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
                 # set it to 0 to disable the removal of very small topics
                 topTopicMassFracThres = 0.05,
                 N0 = 500,
-                max_l = 7,
+                max_l = 3,
                 init_l = 1,
                 # cap the norm of the gradient of topics to avoid too big gradients
                 max_grad_norm = 5,
                 Mstep_sample_topwords = 25000,
                 # normalize by the sum of Em when updating topic embeddings
                 # to avoid too big gradients
-                grad_scale_Em_base = 10000,
+                grad_scale_Em_base = 20000,
                 topW = 12,
                 # when topTopicMassFracPrintThres = 0, print all topics
                 topTopicMassFracPrintThres = 0,
@@ -33,7 +33,7 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
                 delta = 0.1,
                 max_theta_to_avg_ratio = -1,
                 big_theta_step_ratio = 2,
-                MAX_EM_ITERS = 100,
+                MAX_EM_ITERS = 150,
                 topicDiff_tolerance = 2e-3,
                 zero_topic0 = True,
                 smoothing_context_size = 0,

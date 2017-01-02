@@ -24,9 +24,10 @@ class topicvecDir:
         self.unigramFilename = kwargs.get( 'unigramFilename', "top1grams-wiki.txt" )
         self.word_vec_file = kwargs.get( 'word_vec_file', "25000-500-EM.vec" )
         self.topic_vec_file = kwargs.get( 'topic_vec_file', None )
+        self.W = kwargs.get( 'load_embedding_word_count', -1 )
         K = kwargs.get( 'K', 30 )
 
-        self.max_l = kwargs.get( 'max_l', 3 )
+        self.max_l = kwargs.get( 'max_l', 6 )
         self.init_l = kwargs.get( 'init_l', 1 )
         self.max_grad_norm = kwargs.get( 'max_grad_norm', 0 )
         self.grad_scale_Em_base = kwargs.get( 'grad_scale_Em_base', 0 )
@@ -77,7 +78,7 @@ class topicvecDir:
             embedding_arrays = np.load(embedding_npyfile)
             self.V, self.vocab, self.word2ID, skippedWords_whatever = embedding_arrays
         else:
-            self.V, self.vocab, self.word2ID, skippedWords_whatever = load_embeddings(self.word_vec_file)
+            self.V, self.vocab, self.word2ID, skippedWords_whatever = load_embeddings(self.word_vec_file, self.W)
             embedding_arrays = np.array( [ self.V, self.vocab, self.word2ID, skippedWords_whatever ] )
             print "Save embeddings to npy file '%s'" %embedding_npyfile
             np.save( embedding_npyfile, embedding_arrays )
@@ -99,14 +100,21 @@ class topicvecDir:
         self.N0 = self.V.shape[1]
         # number of all words
         self.vocab_size = self.V.shape[0]
-            
+        
+        # words both in the embedding vector file and in the unigram file
+        vocab2 = []
         # set unigram probs
-        self.u = np.zeros(self.vocab_size)
+        u2 = []    
         for wid,w in enumerate(self.vocab):
-            self.u[wid] = self.vocab_dict[w][2]
+            if w not in self.vocab_dict:
+                continue
+            u2.append( self.vocab_dict[w][2] )
+            #vocab2.append(w)
             vocab_dict2[w] = wid
 
-        self.u = normalize(self.u)
+        u2 = np.array(u2)
+        self.u = normalize(u2)
+        #self.vocab = vocab2
         self.vocab_dict = vocab_dict2
 
         # u2 is the top "Mstep_sample_topwords" words of u, 

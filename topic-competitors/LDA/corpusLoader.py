@@ -4,9 +4,18 @@ from sklearn.datasets import fetch_20newsgroups
 from nltk.corpus import reuters
 import HTMLParser
 import os
+import sys
+import unicodedata
+import re
 import pdb
 
+unicode_punc_tbl = dict.fromkeys( i for i in xrange(128, sys.maxunicode)
+                      if unicodedata.category(unichr(i)).startswith('P') )
+
+# 输入: 一个文档
+# 处理过程: 先按标点符号分成句子，然后每句按词边界分词
 def extractSentenceWords(doc, remove_url=True, remove_punc="utf-8", min_length=1):
+    # 去掉指定字符集(缺省去掉utf-8的)中的标点符号
     if remove_punc:
         # ensure doc_u is in unicode
         if not isinstance(doc, unicode):
@@ -20,11 +29,13 @@ def extractSentenceWords(doc, remove_url=True, remove_punc="utf-8", min_length=1
             doc = doc_u.encode(encoding)
         else:
             doc = doc_u
-            
+    
+    # 去掉文本中的URL(可选)        
     if remove_url:
         re_url = r"(https?:\/\/)?(www\.)?[-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)"
         doc = re.sub( re_url, "", doc )
-            
+    
+    # 按句子标点分句        
     sentences = re.split( r"\s*[,;:`\"()?!{}]\s*|--+|\s*-\s+|''|\.\s|\.$|\.\.+|“|”", doc ) #"
     wc = 0
     wordsInSentences = []
@@ -36,6 +47,7 @@ def extractSentenceWords(doc, remove_url=True, remove_punc="utf-8", min_length=1
         if not re.search( "[A-Za-z0-9]", sentence ):
             continue
 
+        # 按词边界分词
         words = re.split( r"\s+\+|^\+|\+?[\-*\/&%=<>\[\]~\|\@\$]+\+?|\'\s+|\'s\s+|\'s$|\s+\'|^\'|\'$|\$|\\|\s+", sentence )
 
         words = filter( lambda w: w, words )
@@ -109,8 +121,10 @@ def load_reuters(setName):
             cat = reuters.categories(doc_id)[0]
             cand_docNum += 1
             
+            # 以'train'开头的文档名放在training集合里
             if doc_id.startswith("train"):
                 cat2set_ids = cat2train_ids
+            # 否则，放到test集合
             else:
                 cat2set_ids = cat2test_ids
                 
