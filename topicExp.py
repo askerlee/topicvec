@@ -334,8 +334,8 @@ for si, setName in enumerate(setNames):
             best_it, best_T, best_loglike = best_last_Ts[0]
             last_it, last_T, last_loglike = best_last_Ts[1]
             
-            save_matrix_as_text( doc_name + "-em%d-best.topic.vec" %best_it, "best topics", best_T  )
-            save_matrix_as_text( doc_name + "-em%d-last.topic.vec" %last_it, "last topics", last_T  )
+            save_matrix_as_text( basename + "-em%d-best.topic.vec" %best_it, "best topics", best_T  )
+            save_matrix_as_text( basename + "-em%d-last.topic.vec" %last_it, "last topics", last_T  )
                 
             save_matrix_as_text( basename + "-em%d.topic.prop" %topicvec.MAX_EM_ITERS, "topic proportion", docs_Em, docs_cat, docs_name, colSep="\t" )
 
