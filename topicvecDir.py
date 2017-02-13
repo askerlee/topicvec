@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg
+# import for using gammaln, psi
 from scipy.special import *
 import getopt
 import sys
@@ -31,30 +32,33 @@ class topicvecDir:
         self.init_l = kwargs.get( 'init_l', 1 )
         self.max_grad_norm = kwargs.get( 'max_grad_norm', 0 )
         self.grad_scale_Em_base = kwargs.get( 'grad_scale_Em_base', 0 )
-        # number of top words to output
+        # number of top words to output into logfile
         self.topW = kwargs.get( 'topW', 12 )
+        # output the first 'topDim' dimensions of T, for debugging
         self.topDim = kwargs.get( 'topDim', 10 )
         self.topTopicMassFracPrintThres = kwargs.get( 'topTopicMassFracPrintThres', 1 )
+        # Dirichlet parameter for the null topic
         self.alpha0 = kwargs.get( 'alpha0', 5 )
+        # Dirichlet parameter for all other topics
         self.alpha1 = kwargs.get( 'alpha1', 1 )
         # initial learning rate
         self.delta = self.iniDelta = kwargs.get( 'iniDelta', 0.1 )
         self.MAX_EM_ITERS = kwargs.get( 'MAX_EM_ITERS', 100 )
         self.topicDiff_tolerance = kwargs.get( 'topicDiff_tolerance', 2e-3 )
+        # whether fix topic 0 to null topic
         self.zero_topic0 = kwargs.get( 'zero_topic0', True )
-        self.smoothing_context_size = kwargs.get( 'smoothing_context_size', 0 )
-        self.context_weight = kwargs.get( 'context_weight', 0.5 )
         self.appendLogfile = kwargs.get( 'appendLogfile', False )
         self.customStopwords = kwargs.get( 'customStopwords', "" )
         self.remove_stop = kwargs.get( 'remove_stop', True )
         self.seed = kwargs.get( 'seed', 0 )
         self.verbose = kwargs.get( 'verbose', 1 )
-        self.printTopic_iterNum = kwargs.get( 'printTopic_iterNum', 20 )
+        # print topics every so many iters
+        self.printTopics_iterNum = kwargs.get( 'printTopics_iterNum', 20 )
+        # compute sum_pi_v is slow. Approximate it by calculating it every few iters to speed up
         self.calcSum_pi_v_iterNum = kwargs.get( 'calcSum_pi_v_iterNum', 1 )
+        # do V-step every few M-steps to speed up. Default: 1 (each M-step)
         self.VStep_iterNum = kwargs.get( 'VStep_iterNum', 1 )
         self.calcLike_iterNum = kwargs.get( 'calcLike_iterNum', 1 )
-        #self.max_theta_to_avg_ratio = kwargs.get( 'max_theta_to_avg_ratio', -1 )
-        #self.big_theta_step_ratio = kwargs.get( 'big_theta_step_ratio', 2 )
 
         self.useDrdtApprox = kwargs.get( 'useDrdtApprox', False )
         self.Mstep_sample_topwords = kwargs.get( 'Mstep_sample_topwords', 0 )
@@ -214,36 +218,8 @@ class topicvecDir:
 
     def updateTheta(self):
         for d in xrange(self.D):
-            L = self.docs_L[d]
             self.docs_theta[d] = np.sum( self.docs_Pi[d], axis=0 ) + self.alpha
             
-#            # if this component prior becomes too big, it will absorb irrelevant words -- a vicious circle
-#            if self.max_theta_to_avg_ratio > 0:
-#                self.fileLogger.debug( "Theta of doc %i:" %d )
-#                self.fileLogger.debug( self.docs_theta[d] )
-#                theta_sum = np.sum(self.docs_theta[d])
-#                theta_thres = self.max_theta_to_avg_ratio * theta_sum / self.K
-#                thetas_k = [ [ self.docs_theta[d][k], k ] for k in xrange(self.K) ]
-#                thetas_k_sorted = sorted( thetas_k, key=lambda theta_k: theta_k[0] )
-#                if thetas_k_sorted[-1][0] > theta_thres:
-#                    i = 0
-#                    # find the first component that is too big
-#                    while i < self.K:
-#                        if thetas_k_sorted[i][0] > theta_thres:
-#                            break
-#                        i += 1
-#                    # set to 1 to disable initStepBoost
-#                    initStepBoost = 1
-#                    while i < self.K:
-#                        if thetas_k_sorted[i][0] > thetas_k_sorted[i-1][0] * self.big_theta_step_ratio * initStepBoost:
-#                            thetas_k_sorted[i][0] = thetas_k_sorted[i-1][0] * self.big_theta_step_ratio * initStepBoost
-#                            k = thetas_k_sorted[i][1]
-#                            orig_thetaK = self.docs_theta[d][k]
-#                            self.docs_theta[d][k] = thetas_k_sorted[i][0]
-#                            self.fileLogger.debug( "theta-%d %.3f -> %.3f", k, orig_thetaK, self.docs_theta[d][k] )
-#                        i += 1
-#                        initStepBoost = 1
-
     def updatePi(self, docs_theta):
         docs_Pi = []
         psiDocs_theta = psi(docs_theta)
@@ -267,16 +243,6 @@ class topicvecDir:
     
                 for i,wid in enumerate(wids):
                     v = self.V[wid]
-                    # smooth the current vector using context (preceding) vectors
-                    # default: disabled
-    #                if self.smoothing_context_size and i > 0:
-    #                    j = max( 0, i - self.smoothing_context_size )
-    #                    totalWeight = 1
-    #                    for x in xrange(j, i):
-    #                        v += self.context_weight * self.V[ wids[x] ]
-    #                        totalWeight += self.context_weight
-    #                    v /= totalWeight
-    
                     Tv = np.dot( self.T, v )
                     Pi[i] = np.exp( psiDocs_theta[d] + Tv + self.r )
 
@@ -333,19 +299,19 @@ class topicvecDir:
         else:
             Em_drdT = Em_drdT_exact.T
 
-        # diffMat: K x N0
-        diffMat = self.sum_pi_v - Em_drdT
-        diffMat *= self.delta * grad_scale
+        # dLdT, gradT: K x N0
+        dLdT = self.sum_pi_v - Em_drdT
+        gradT = dLdT * self.delta * grad_scale
         
-        maxTStep = np.max( np.linalg.norm( diffMat, axis=1 ) )
+        maxTStep = np.max( np.linalg.norm( gradT, axis=1 ) )
         #if self.it >= 50:
         #    pdb.set_trace()
             
         if self.max_grad_norm > 0 and maxTStep > self.max_grad_norm:
-            diffMat *= self.max_grad_norm / maxTStep
-        T2 = self.T + diffMat
+            gradT *= self.max_grad_norm / maxTStep
+        T2 = self.T + gradT
 
-        maxTStep = np.max( np.linalg.norm( diffMat, axis=1 ) )
+        maxTStep = np.max( np.linalg.norm( gradT, axis=1 ) )
 
         # self.max_l == 0: do not do normalization
         if self.max_l > 0:
@@ -358,8 +324,8 @@ class topicvecDir:
             T2[0] = np.zeros(self.N0)
 
         r2 = self.calcTopicResiduals(T2)
-        topicDiff = np.linalg.norm( self.T - T2 )
-        return T2, r2, topicDiff, maxTStep, diffMat
+        topicDiffNorm = np.linalg.norm( self.T - T2 )
+        return T2, r2, topicDiffNorm, maxTStep
 
     # Pi: L x K
     # sum_pi_v: K x N0
@@ -380,7 +346,7 @@ class topicvecDir:
     # in the batch mode for multiple files, typically self.verbose == 0
     # then by default no screen output anyway
     # in the single file mode, typically self.verbose == 1
-    # then in printTopWordsInTopic(),
+    # then in printTopWordsInTopics(),
     #   outputToScreen == True => screenVerboseThres == 1
     #       with screen output
     #   outputToScreen == False => screenVerboseThres == 2
@@ -403,7 +369,7 @@ class topicvecDir:
         return screen_log_progress
 
     # topTopicMassFracPrintThres: when a topic's fraction Em[k]/L > topTopicMassFracPrintThres/K, print it
-    def printTopWordsInTopic( self, docs_theta, outputToScreen=False ):
+    def printTopWordsInTopics( self, docs_theta, outputToScreen=False ):
         wids2 = self.wid2freq.keys()
         wids_topics_sim = np.dot( normalizeF( self.V[wids2] ), normalizeF(self.T).T )
         wids_topics_dot = np.dot( self.V[wids2], self.T.T )
@@ -493,13 +459,13 @@ class topicvecDir:
             line = ""
             for rowID in rowID_sorted[:self.topW]:
                 wid = wids2[rowID]
-                topicAvgProp = row_topicsDampedProp[rowID, k]
+                topicDampedProp = row_topicsDampedProp[rowID, k]
                 topicProp = row_topicsProp[rowID, k]
                 sim = wids_topics_sim[rowID, k]
                 dotprod = wids_topics_dot[rowID, k]
 
                 line += "%s (%d,%d): %.2f/%.2f/%.2f/%.2f " %( self.vocab[wid], wid, self.wid2freq[wid],
-                                    topicAvgProp, topicProp, sim, dotprod )
+                                    topicDampedProp, topicProp, sim, dotprod )
 
             out(line)
 
@@ -630,7 +596,6 @@ class topicvecDir:
             centers, K x N0
             Xtocentre: each X -> its nearest center, ints M -> K
             distances, M
-        see also: kmeanssample below, class Kmeans below.
         """
     
         wids2 = self.wid2freq.keys()
@@ -740,8 +705,6 @@ class topicvecDir:
         out0( "%d topics." %(self.K) )
         out0( "%s inference starts at %s" %( self.docsName, startTimeStr ) )
 
-        progress = self.genProgressor()
-
         self.T = np.zeros( ( self.K, self.N0 ) )
 
         if self.seed != 0:
@@ -769,7 +732,7 @@ class topicvecDir:
         self.docs_theta = np.ones( (self.D, self.K) )
 
         lastIterEndTime = time.time()
-        print "\rInitial learning rate: %.2f" %(self.iniDelta)
+        print "Initial learning rate: %.2f" %(self.iniDelta)
 
         self.docs_Pi = self.updatePi( self.docs_theta )
         self.updateTheta()
@@ -783,16 +746,15 @@ class topicvecDir:
         iterDur = time.time() - lastIterEndTime
         lastIterEndTime = time.time()
 
-        print "\rIter %d: loglike %.2f, %.1fs" %( self.it, loglike, iterDur )
+        print "Iter %d: loglike %.2f, %.1fs" %( self.it, loglike, iterDur )
 
         # an arbitrary number to satisfy pylint
-        topicDiff = 100000
-        it_loglike = 0
+        topicDiffNorm = 100000
 
         unif_docs_theta = np.ones( (self.D, self.K) )
         Ts_loglikes = []
 
-        while self.it == 0 or ( self.it < self.MAX_EM_ITERS and topicDiff > self.topicDiff_tolerance ):
+        while self.it == 0 or ( self.it < self.MAX_EM_ITERS and topicDiffNorm > self.topicDiff_tolerance ):
         #while self.it == 0 or ( self.it < self.MAX_EM_ITERS and abs(loglike - loglike2) > loglike_tolerance ):
             self.it += 1
             self.fileLogger.debug( "EM Iter %d:", self.it )
@@ -800,11 +762,12 @@ class topicvecDir:
             self.delta = self.iniDelta / ( self.it + 1 )
             # T, r not updated inside updateTopicEmbeddings()
             # because sometimes we want to keep the original T, r
-            self.T, self.r, topicDiff, maxTStep, diffMat = self.updateTopicEmbeddings()
+            self.T, self.r, topicDiffNorm, maxTStep = self.updateTopicEmbeddings()
             
             if self.it % self.VStep_iterNum == 0:
-                self.updateTheta()
+                # does it matter to swap updatePi() & updateTheta()?
                 self.docs_Pi = self.updatePi( self.docs_theta )
+                self.updateTheta()
 
             # calcSum_pi_v() takes a long time on a large corpus
             # so it can be done once every a few iters, with slight loss of performance
@@ -814,15 +777,14 @@ class topicvecDir:
 
             loglike2 = loglike
             loglike = self.calcLoglikelihood()
-            it_loglike = self.it
 
             iterDur = time.time() - lastIterEndTime
             lastIterEndTime = time.time()
 
-            iterStatusMsg = "\rIter %d: loglike(%d) %.2f, topicDiff %.4f, maxTStep %.3f, %.1fs" %( self.it,
-                                           it_loglike, loglike, topicDiff, maxTStep, iterDur )
+            iterStatusMsg = "Iter %d: loglike %.2f, topicDiffNorm %.4f, maxTStep %.3f, %.1fs" %( self.it,
+                                           loglike, topicDiffNorm, maxTStep, iterDur )
 
-            if self.it % self.printTopic_iterNum == 0:
+            if self.it % self.printTopics_iterNum == 0:
                 out0(iterStatusMsg)
 
                 if self.verbose >= 2:
@@ -832,9 +794,9 @@ class topicvecDir:
                     self.fileLogger.debug("r:")
                     self.fileLogger.debug(self.r)
 
-                #self.printTopWordsInTopic(unif_docs_theta, False)
-                self.printTopWordsInTopic(self.docs_theta, False)
+                self.printTopWordsInTopics(self.docs_theta, False)
             else:
+                # not using out0 because the "\r" in the console output shouldn't be in the log file
                 print "%s  \r" %iterStatusMsg,
                 self.fileLogger.debug(iterStatusMsg)
                 Em = self.calcEm( self.docs_Pi )
@@ -844,9 +806,9 @@ class topicvecDir:
             
         if self.verbose >= 1:
             # if == 0, topics has just been printed in the while loop
-            if self.it % self.printTopic_iterNum != 0:
-                #self.printTopWordsInTopic(unif_docs_theta, False)
-                self.printTopWordsInTopic(self.docs_theta, False)
+            if self.it % self.printTopics_iterNum != 0:
+                #self.printTopWordsInTopics(unif_docs_theta, False)
+                self.printTopWordsInTopics(self.docs_theta, False)
 
         endTime = time.time()
         endTimeStr = timeToStr(endTime)
@@ -862,11 +824,9 @@ class topicvecDir:
 
         # sort according to loglike
         Ts_loglikes_sorted = sorted( Ts_loglikes, key=lambda T_loglike: T_loglike[2], reverse=True )
-        # best T is the last T
-        if Ts_loglikes_sorted[0][0] == self.it:
-            best_last_Ts = [ Ts_loglikes_sorted[0], None ]
-        else:
-            best_last_Ts = [ Ts_loglikes_sorted[0], Ts_loglikes[-1] ]
+        # best T could be the last T. 
+        # In that case, the two elements in best_last_Ts are the same
+        best_last_Ts = [ Ts_loglikes_sorted[0], Ts_loglikes[-1] ]
 
         return best_last_Ts, Em, docs_Em, self.docs_Pi
 

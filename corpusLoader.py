@@ -5,6 +5,7 @@ from nltk.corpus import reuters
 import HTMLParser
 import os
 import pdb
+from utils import *
 
 def extractSentenceWords(doc, remove_url=True, remove_punc="utf-8", min_length=1):
     if remove_punc:

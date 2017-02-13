@@ -31,17 +31,14 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
                 alpha0 = 0.1,
                 alpha1 = 0.1,
                 delta = 0.1,
-                max_theta_to_avg_ratio = -1,
-                big_theta_step_ratio = 2,
                 MAX_EM_ITERS = 150,
                 topicDiff_tolerance = 2e-3,
                 zero_topic0 = True,
-                smoothing_context_size = 0,
                 remove_stop = True,
                 useDrdtApprox = False,
                 verbose = 0,
                 seed = 0,
-                printTopic_iterNum = 10,
+                printTopics_iterNum = 10,
                 calcSum_pi_v_iterNum = 1,
                 VStep_iterNum = 5
             )
@@ -50,6 +47,7 @@ def usage():
     print """Usage: topicExp.py -s                corpus_name set_name(s)
                    -p topic_vec_file corpus_name set_name(s)
                    [ -w ]            corpus_name set_name(s)
+  corpus_name: '20news' or  'reuters'
   set_name(s): 'train', 'test' or 'train,test' (will save in separate files)
   -s:          Train on separate categories
   -w:          Dump words only (no inference of topics)"""

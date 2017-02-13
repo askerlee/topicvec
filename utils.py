@@ -183,12 +183,14 @@ def normalizeF(data, axis=1):
         return data / normF(data) 
     
     data2 = np.copy(data)
+    # normalize each column of data
     if axis == 0:
         for i in xrange(data2.shape[1]):
             if normF(data2[:,i]) > 0:
                 data2[:,i] /= normF(data2[:,i])
         return data2
-        
+    
+    # normalize each row of data     
     elif axis == 1:
         for i in xrange(data2.shape[0]):
             if normF(data2[i]) > 0:
