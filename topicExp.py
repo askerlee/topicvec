@@ -55,7 +55,7 @@ def usage():
 corpusName = None
 corpus2loader = { '20news': load_20news, 'reuters': load_reuters }
     
-setNames = [ ]
+subsetNames = [ ]
 topic_vec_file = None
 MAX_ITERS = -1
 MAX_TopicProp_ITERS = 1
@@ -72,7 +72,7 @@ try:
         raise getopt.GetoptError("Not enough free arguments")
     corpusName = args[0]
     if len(args) == 2:
-        setNames = args[1].split(",")
+        subsetNames = args[1].split(",")
     if len(args) > 2:
         raise getopt.GetoptError("Too many free arguments")
 
@@ -104,7 +104,7 @@ if not onlyGetOriginalText:
 # The leading 'all-bogus' is only to get word mappings from the original IDs in 
 # the embedding file to a compact word ID list, to speed up computation of sLDA
 # The mapping has to be done on 'all' to include all words in train and test sets
-    setNames = [ 'all-mapping' ] + setNames
+    subsetNames = [ 'all-mapping' ] + subsetNames
     
 if MAX_ITERS > 0:
     if onlyInferTopicProp:
@@ -117,18 +117,18 @@ wid2compactId = {}
 compactIds_word = []
 hasIdMapping = False
 
-for si, setName in enumerate(setNames):       
-    print "Process set '%s':" %setName
-    if setName == 'all-mapping':
-        setName = 'all'
+for si, subsetName in enumerate(subsetNames):       
+    print "Process subset '%s':" %subsetName
+    if subsetName == 'all-mapping':
+        subsetName = 'all'
         onlyGetWidMapping = True
     else:
         onlyGetWidMapping = False
         
-    setDocNum, orig_docs_words, orig_docs_name, orig_docs_cat, cats_docsWords, \
-            cats_docNames, category_names = loader(setName)
+    subsetDocNum, orig_docs_words, orig_docs_name, orig_docs_cat, cats_docsWords, \
+            cats_docNames, category_names = loader(subsetName)
     catNum = len(category_names)
-    basename = "%s-%s-%d" %( corpusName, setName, setDocNum )
+    basename = "%s-%s-%d" %( corpusName, subsetName, subsetDocNum )
     config['logfilename'] = basename
 
     # dump original words (without filtering)
@@ -141,7 +141,7 @@ for si, setName in enumerate(setNames):
                 ORIG.write( "%s " %w )
         ORIG.write("\n")
     ORIG.close()
-    print "%d original docs saved in '%s'" %( setDocNum, orig_filename )
+    print "%d original docs saved in '%s'" %( subsetDocNum, orig_filename )
 
     if onlyGetOriginalText:
         continue

@@ -98,20 +98,18 @@ class topicvecDir:
         # number of all words
         self.vocab_size = self.V.shape[0]
         
-        # words both in the embedding vector file and in the unigram file
-        vocab2 = []
         # set unigram probs
         u2 = []    
         for wid,w in enumerate(self.vocab):
             if w not in self.vocab_dict:
                 continue
             u2.append( self.vocab_dict[w][2] )
-            #vocab2.append(w)
             vocab_dict2[w] = wid
 
         u2 = np.array(u2)
         self.u = normalize(u2)
-        #self.vocab = vocab2
+        # structure of vocab_dict changed here. Original vocab_dict is w->[id, freq, unigram_prob]
+        # now vocab_dict is only w->id
         self.vocab_dict = vocab_dict2
 
         # u2 is the top "Mstep_sample_topwords" words of u, 
@@ -188,6 +186,7 @@ class topicvecDir:
             Em += np.sum( docs_Pi[d], axis=0 )
         return Em
 
+    # this actually computes the variational lowerbound, as an approximation of the (intractable) data log-likelihood
     def calcLoglikelihood(self):
         totalLoglike = 0
 
