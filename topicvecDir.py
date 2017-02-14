@@ -91,14 +91,7 @@ class topicvecDir:
         vocab_dict2 = {}
         
         if self.normalize_vecs:
-            self.Vnorm = np.array( [ normF(x) for x in self.V ] )
-            for i,w in enumerate(self.vocab):
-                if self.Vnorm[i] == 0:
-                    print "WARN: %s norm is 0" %w
-                    # set to 1 to avoid "divided by 0 exception"
-                    self.Vnorm[i] = 1
-                
-            self.V /= self.Vnorm[:, None]
+            self.V = normalizeF(self.V)
             
         # dimensionality of topic/word embeddings
         self.N0 = self.V.shape[1]

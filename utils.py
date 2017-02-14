@@ -136,6 +136,7 @@ def norm1(M, Weight=None):
 
     return s
 
+# F-norm of a vector or a matrix
 def normF(M, Weight=None):
     if len(M.shape) == 1:
         if Weight is not None:
@@ -192,10 +193,9 @@ def normalizeF(data, axis=1):
     
     # normalize each row of data     
     elif axis == 1:
-        for i in xrange(data2.shape[0]):
-            if normF(data2[i]) > 0:
-                data2[i] /= normF(data2[i])
-        return data2                
+        norms = np.array( [ normF(x) for x in data2 ] )
+        norms[ norms==0 ] = 1
+        data2 /= norms[:, None]
     else:
         raise RuntimeError('function normalize: axis must be 0/1')
 
