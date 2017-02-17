@@ -32,6 +32,7 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
                 alpha1 = 0.1,
                 delta = 0.1,
                 MAX_EM_ITERS = 150,
+                MAX_TopicProp_ITERS = 1,
                 topicDiff_tolerance = 2e-3,
                 zero_topic0 = True,
                 remove_stop = True,
@@ -45,20 +46,22 @@ config = dict(  unigramFilename = "top1grams-wiki.txt",
 
 def usage():
     print """Usage: topicExp.py -s                corpus_name set_name(s)
-                   -p topic_vec_file corpus_name set_name(s)
+                   -i topic_vec_file corpus_name set_name(s)
                    [ -w ]            corpus_name set_name(s)
+                   (Optional) -t max_iter_num ...
   corpus_name: '20news' or  'reuters'
   set_name(s): 'train', 'test' or 'train,test' (will save in separate files)
   -s:          Train on separate categories
-  -w:          Dump words only (no inference of topics)"""
-
+  -i:          Do inference on a corpus given a topic vec file
+  -w:          Dump words only (no inference of topics)
+  -t:          Specify the maximum number of iterations"""
+  
 corpusName = None
 corpus2loader = { '20news': load_20news, 'reuters': load_reuters }
     
 subsetNames = [ ]
 topic_vec_file = None
 MAX_ITERS = -1
-MAX_TopicProp_ITERS = 1
 onlyDumpWords = False
 separateCatTraining = False
 onlyInferTopicProp = False
@@ -66,7 +69,7 @@ topicTraitStr = ""
 onlyGetOriginalText = False
 
 try:
-    opts, args = getopt.getopt( sys.argv[1:], "p:i:wso" )
+    opts, args = getopt.getopt( sys.argv[1:], "i:t:wso" )
 
     if len(args) == 0:
         raise getopt.GetoptError("Not enough free arguments")
@@ -77,13 +80,13 @@ try:
         raise getopt.GetoptError("Too many free arguments")
 
     for opt, arg in opts:
-        if opt == '-p':
+        if opt == '-i':
             onlyInferTopicProp = True
             topic_vec_file = arg
             # if 'useDrdtApprox' == True, will precompute matrix Evv, which is very slow
             # disable to speed up
             config['useDrdtApprox'] = False
-        if opt == '-i':
+        if opt == '-t':
             MAX_ITERS = int(arg)
         if opt == '-w':
             onlyDumpWords = True
@@ -101,7 +104,7 @@ except getopt.GetoptError, e:
     sys.exit(2)
 
 if not onlyGetOriginalText:
-# The leading 'all-bogus' is only to get word mappings from the original IDs in 
+# The leading 'all-mapping' is only to get word mappings from the original IDs in 
 # the embedding file to a compact word ID list, to speed up computation of sLDA
 # The mapping has to be done on 'all' to include all words in train and test sets
     subsetNames = [ 'all-mapping' ] + subsetNames
@@ -114,7 +117,7 @@ if MAX_ITERS > 0:
 
 loader = corpus2loader[corpusName]
 wid2compactId = {}
-compactIds_word = []
+compactId_words = []
 hasIdMapping = False
 
 for si, subsetName in enumerate(subsetNames):       
@@ -164,12 +167,15 @@ for si, subsetName in enumerate(subsetNames):
     out( "%d docs left after filtering empty docs" %(readDocNum) )
     assert readDocNum == topicvec.D, "Returned %d doc idx != %d docs in Topicvec" %(readDocNum, topicvec.D)
     
+    # executed when subsetName == 'all-mapping'
     if onlyGetWidMapping:
         sorted_wids = sorted( topicvec.wid2freq.keys() )
         uniq_wid_num = len(sorted_wids)
         for i, wid in enumerate(sorted_wids):
-            wid2compactId[wid] = i
-            compactIds_word.append( topicvec.vocab[wid] )
+            # svm feature index cannot be 0
+            # +1 to avoid 0 being used as a feature index
+            wid2compactId[wid] = i + 1
+            compactId_words.append( topicvec.vocab[wid] )
             
         hasIdMapping = True
         onlyGetWidMapping = False
@@ -177,7 +183,7 @@ for si, subsetName in enumerate(subsetNames):
         id2word_filename = "%s.id2word.txt" %basename
         ID2WORD = open( id2word_filename, "w" )
         for i in xrange(uniq_wid_num):
-            ID2WORD.write( "%d\t%s\n" %( i, compactIds_word[i] ) )
+            ID2WORD.write( "%d\t%s\n" %( i, compactId_words[i] ) )
         ID2WORD.close()
         continue
             
@@ -209,8 +215,6 @@ for si, subsetName in enumerate(subsetNames):
         for wid in wids:
             cwid = wid2compactId[wid]
             if cwid in cwid2freq:
-                # wid could be 0, but svm feature index cannot be 0
-                # +1 to avoid 0 being used as a feature index
                 cwid2freq[cwid] += 1
             else:
                 cwid2freq[cwid] = 1
@@ -237,9 +241,7 @@ for si, subsetName in enumerate(subsetNames):
         wids = topicvec.docs_wids[i]
         cwid2freq = {}
         for wid in wids:
-            # cwid could be 0, but svm feature index cannot be 0
-            # +1 to avoid 0 being used as a feature index
-            cwid = wid2compactId[wid]+1
+            cwid = wid2compactId[wid]
             if cwid in cwid2freq:
                 cwid2freq[cwid] += 1
             else:
@@ -257,14 +259,11 @@ for si, subsetName in enumerate(subsetNames):
     if onlyDumpWords:
         continue
     
-    #pdb.set_trace()
-            
     # load topics from a file, infer the topic proportions, and save the proportions
     if onlyInferTopicProp:
-        docs_Em, docs_Pi = topicvec.inferTopicProps(T, MAX_TopicProp_ITERS)
-        #topicvec.printTopWordsInTopic()
+        docs_Em, docs_Pi = topicvec.inferTopicProps(T, config['MAX_TopicProp_ITERS'])
         # dump the topic proportions in my own matrix format
-        save_matrix_as_text( basename + "-%s-i%d.topic.prop" %(topicTraitStr, MAX_TopicProp_ITERS), 
+        save_matrix_as_text( basename + "-%s-i%d.topic.prop" %(topicTraitStr, config['MAX_TopicProp_ITERS']), 
                                 "topic proportion", docs_Em, docs_cat, docs_name, colSep="\t" )
         
         # dump the topic proportions into SVMTOPIC_PROP in libsvm/svmlight format
@@ -284,9 +283,7 @@ for si, subsetName in enumerate(subsetNames):
             wids = topicvec.docs_wids[i]
             cwid2freq = {}
             for wid in wids:
-                # cwid could be 0, but svm feature index cannot be 0
-                # +1 to avoid 0 being used as a feature index
-                cwid = wid2compactId[wid]+1
+                cwid = wid2compactId[wid]
                 if cwid in cwid2freq:
                     cwid2freq[cwid] += 1
                 else:
@@ -337,7 +334,7 @@ for si, subsetName in enumerate(subsetNames):
             save_matrix_as_text( basename + "-em%d-best.topic.vec" %best_it, "best topics", best_T  )
             save_matrix_as_text( basename + "-em%d-last.topic.vec" %last_it, "last topics", last_T  )
                 
-            save_matrix_as_text( basename + "-em%d.topic.prop" %topicvec.MAX_EM_ITERS, "topic proportion", docs_Em, docs_cat, docs_name, colSep="\t" )
+            save_matrix_as_text( basename + "-em%d.topic.prop" %config['MAX_EM_ITERS'], "topic proportion", docs_Em, docs_cat, docs_name, colSep="\t" )
 
         else:
             # infer topics for each category, combine them and save in one file
@@ -349,7 +346,6 @@ for si, subsetName in enumerate(subsetNames):
             best_T = []
             last_T = []
             slim_T = []
-            cats_docs_idx = []
             totalDocNum = 0
             #pdb.set_trace()
             
@@ -358,7 +354,6 @@ for si, subsetName in enumerate(subsetNames):
                 out( "Inference on category %d:" %( catID+1 ) )
                 cat_docs_idx = topicvec.setDocs( cats_docsWords[catID], cats_docNames[catID] )
                 totalDocNum += len(cat_docs_idx)
-                cats_docs_idx.append(cat_docs_idx)
                 cat_best_last_Ts, cat_Em, cat_docs_Em, cat_Pi = topicvec.inference()
                 cat_best_it, cat_best_T, cat_best_loglike = cat_best_last_Ts[0]
                 if cat_best_last_Ts[1]:

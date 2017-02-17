@@ -648,7 +648,6 @@ class topicvecDir:
         self.r = self.calcTopicResiduals(T)
         # uniform prior
         self.docs_theta = np.ones( (self.D, self.K) )
-        it_loglikeer = 0
         loglike = 0
 
         for i in xrange(MAX_ITERS):
@@ -656,7 +655,8 @@ class topicvecDir:
             docs_Pi2 = self.docs_Pi
             self.docs_Pi = self.updatePi( self.docs_theta )
             self.updateTheta()
-
+            self.calcSum_pi_v()
+            
             if i > 0:
                 docs_Pi_diff = np.zeros(self.D)
                 for d in xrange(self.D):
@@ -667,14 +667,10 @@ class topicvecDir:
                 max_Pi_diff = 0
                 total_Pi_diff = 0
 
-            """if i % 5 == 0:
-                self.calcSum_pi_v()
-                loglike = self.calcLoglikelihood()
-                it_loglikeer = i
-            """
             iterDur = time.time() - iterStartTime
-            print "Iter %d loglike(%d) %.2f, Pi diff total %.3f, max %.3f. %.1fs" %( i, it_loglikeer,
-                                                loglike, total_Pi_diff, max_Pi_diff, iterDur )
+            loglike = self.calcLoglikelihood()
+            print "Iter %d loglike %.2f, Pi diff total %.3f, max %.3f. %.1fs" %( i, 
+                                 loglike, total_Pi_diff, max_Pi_diff, iterDur )
 
         docs_Em = np.zeros( (self.D, self.K) )
         for d, Pi in enumerate(self.docs_Pi):
@@ -731,7 +727,6 @@ class topicvecDir:
 
         self.calcSum_pi_v()
         loglike = self.calcLoglikelihood()
-        loglike2 = 0
 
         self.it = 0
 
@@ -747,7 +742,6 @@ class topicvecDir:
         Ts_loglikes = []
 
         while self.it == 0 or ( self.it < self.MAX_EM_ITERS and topicDiffNorm > self.topicDiff_tolerance ):
-        #while self.it == 0 or ( self.it < self.MAX_EM_ITERS and abs(loglike - loglike2) > loglike_tolerance ):
             self.it += 1
             self.fileLogger.debug( "EM Iter %d:", self.it )
 
@@ -763,11 +757,10 @@ class topicvecDir:
 
             # calcSum_pi_v() takes a long time on a large corpus
             # so it can be done once every a few iters, with slight loss of performance
-            # on 20news and reuters, calcSum_pi_v() is fast enough and this acceleration is not necessary
+            # on 20news and reuters, calcSum_pi_v() is fast enough and this acceleration is unnecessary
             if self.it <= 5 or self.it == self.MAX_EM_ITERS or self.it % self.calcSum_pi_v_iterNum == 0:
                 self.calcSum_pi_v()
 
-            loglike2 = loglike
             loglike = self.calcLoglikelihood()
 
             iterDur = time.time() - lastIterEndTime
@@ -809,7 +802,9 @@ class topicvecDir:
         print
         out0( "%s inference ends at %s. %d iters, %d seconds." %( self.docsName, endTimeStr, self.it, inferDur ) )
 
+        # Em: the global (all documents) distribution of topic mass 
         Em = self.calcEm( self.docs_Pi )
+        # docs_Em: the document-wise distribution of topic mass 
         docs_Em = np.zeros( (self.D, self.K) )
         for d, Pi in enumerate(self.docs_Pi):
             docs_Em[d] = np.sum( Pi, axis=0 )
