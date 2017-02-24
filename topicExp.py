@@ -120,6 +120,16 @@ wid2compactId = {}
 compactId_words = []
 hasIdMapping = False
 
+if onlyInferTopicProp:
+    topicfile_trunk = topic_vec_file.split(".")[0]
+    topicTraits = topicfile_trunk.split("-")[3:]
+    topicTraitStr = "-".join(topicTraits)
+    T = load_matrix_from_text( topic_vec_file, "topic" )
+    config['K'] = T.shape[0]
+
+topicvec = topicvecDir(**config)
+out = topicvec.genOutputter(0)
+
 for si, subsetName in enumerate(subsetNames):       
     print "Process subset '%s':" %subsetName
     if subsetName == 'all-mapping':
@@ -149,17 +159,6 @@ for si, subsetName in enumerate(subsetNames):
     if onlyGetOriginalText:
         continue
         
-    if si == 0:
-        if onlyInferTopicProp:
-            topicfile_trunk = topic_vec_file.split(".")[0]
-            topicTraits = topicfile_trunk.split("-")[3:]
-            topicTraitStr = "-".join(topicTraits)
-            T = load_matrix_from_text( topic_vec_file, "topic" )
-            config['K'] = T.shape[0]
-        
-        topicvec = topicvecDir(**config)
-        out = topicvec.genOutputter(0)
-    
     docs_idx = topicvec.setDocs( orig_docs_words, orig_docs_name )
     docs_name = [ orig_docs_name[i] for i in docs_idx ]
     docs_cat = [ orig_docs_cat[i] for i in docs_idx ]

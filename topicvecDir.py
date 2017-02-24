@@ -229,7 +229,7 @@ class topicvecDir:
                 Vd = self.V[wids]
                 TV = np.dot( Vd, self.T.T )
                 Pi = np.exp( psiDocs_theta[d] + TV + self.r )
-                
+            # slower but avoids using up memory    
             else:
                 Pi = np.zeros( (L, self.K) )
     

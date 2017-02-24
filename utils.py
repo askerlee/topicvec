@@ -198,6 +198,7 @@ def normalizeF(data, axis=1):
         data2 /= norms[:, None]
     else:
         raise RuntimeError('function normalize: axis must be 0/1')
+    return data2
 
 def cosine(x, y):
     x2 = normalizeF(x)
@@ -1712,7 +1713,7 @@ def extractSentenceWords(doc, remove_url=True, remove_punc="utf-8", min_length=1
         # ensure doc_u is in unicode
         if not isinstance(doc, unicode):
             encoding = remove_punc
-            doc_u = doc.decode(encoding)
+            doc_u = doc.decode(encoding, errors='ignore')
         else:
             doc_u = doc
         # remove unicode punctuation marks, keep ascii punctuation marks
