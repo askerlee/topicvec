@@ -127,6 +127,7 @@ if onlyInferTopicProp:
     T = load_matrix_from_text( topic_vec_file, "topic" )
     config['K'] = T.shape[0]
 
+config['logfilename'] = corpusName
 topicvec = topicvecDir(**config)
 out = topicvec.genOutputter(0)
 
@@ -142,7 +143,6 @@ for si, subsetName in enumerate(subsetNames):
             cats_docNames, category_names = loader(subsetName)
     catNum = len(category_names)
     basename = "%s-%s-%d" %( corpusName, subsetName, subsetDocNum )
-    config['logfilename'] = basename
 
     # dump original words (without filtering)
     orig_filename = "%s.orig.txt" %basename
