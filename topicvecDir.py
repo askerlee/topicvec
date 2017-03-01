@@ -100,12 +100,20 @@ class topicvecDir:
         
         # set unigram probs
         u2 = []    
+        oovcount = 0
+        unigram_oov_prior = 0.000001
         for wid,w in enumerate(self.vocab):
             if w not in self.vocab_dict:
-                continue
-            u2.append( self.vocab_dict[w][2] )
-            vocab_dict2[w] = wid
+                oovcount += 1
+                u2.append(unigram_oov_prior)
+            else:
+                u2.append( self.vocab_dict[w][2] )
+                vocab_dict2[w] = wid
 
+        if oovcount > 0:
+            print "%d words in '%s' but not in '%s'. Unigram prob set to oov prior %.3g" %(oovcount, self.word_vec_file, 
+                    self.unigramFilename, unigram_oov_prior)
+            
         u2 = np.array(u2)
         self.u = normalize(u2)
         # structure of vocab_dict changed here. Original vocab_dict is w->[id, freq, unigram_prob]
@@ -169,7 +177,7 @@ class topicvecDir:
         print "Precompute matrix u_V"
         # each elem of u multiplies each row of V
         # Pw_V: Mstep_sample_topwords x N0
-        self.Pw_V = self.u2[:, np.newaxis] * self.V2
+        self.Pw_V = self.u2[:, None] * self.V2
 
         if self.useDrdtApprox:
             print "Precompute vector Ev"
