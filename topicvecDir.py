@@ -28,9 +28,10 @@ class topicvecDir:
         self.W = kwargs.get( 'load_embedding_word_count', -1 )
         K = kwargs.get( 'K', 30 )
 
-        self.max_l = kwargs.get( 'max_l', 6 )
+        self.max_l = kwargs.get( 'max_l', 5 )
         self.init_l = kwargs.get( 'init_l', 1 )
-        self.max_grad_norm = kwargs.get( 'max_grad_norm', 0 )
+        self.max_grad_norm = kwargs.get( 'max_grad_norm', 1.0 )
+        self.max_grad_norm_fraction = kwargs.get( 'max_grad_norm_fraction', 0.2 )
         self.grad_scale_Em_base = kwargs.get( 'grad_scale_Em_base', 0 )
         # number of top words to output into logfile
         self.topW = kwargs.get( 'topW', 12 )
@@ -43,8 +44,8 @@ class topicvecDir:
         self.alpha1 = kwargs.get( 'alpha1', 1 )
         # initial learning rate
         self.delta = self.iniDelta = kwargs.get( 'iniDelta', 0.1 )
-        self.MAX_EM_ITERS = kwargs.get( 'MAX_EM_ITERS', 100 )
-        self.topicDiff_tolerance = kwargs.get( 'topicDiff_tolerance', 2e-3 )
+        self.MAX_EM_ITERS = kwargs.get( 'MAX_EM_ITERS', 200 )
+        self.topicDiff_tolerance = kwargs.get( 'topicDiff_tolerance', 1e-2 )
         # whether fix topic 0 to null topic
         self.zero_topic0 = kwargs.get( 'zero_topic0', True )
         self.appendLogfile = kwargs.get( 'appendLogfile', False )
@@ -271,27 +272,26 @@ class topicvecDir:
             grad_scale = self.grad_scale_Em_base / np.sum(Em)
         else:
             grad_scale = 1
-                        
+                                
         # Em: 1 x K vector
         # r: 1 x K vector
         # Em_exp_r: 1 x K vector
         Em_exp_r = Em * np.exp(self.r)
 
-        debug = False
-
-        if debug or self.useDrdtApprox:
-            # EV_XT: K x N0
-            # Em_drdT_approx: N0 x K
-            EV_XT = self.EV + np.dot( self.T, self.Evv )
-            Em_drdT_approx = EV_XT.T * Em_exp_r
-        if debug or not self.useDrdtApprox:
-            # d_EwVT_dT: K x N0
-            d_EwVT_dT = np.dot( self.expVT.T, self.Pw_V )
-            # Em_drdT_exact: N0 x K
-            Em_drdT_exact = d_EwVT_dT.T * Em_exp_r
-
-        #if debug:
-        #    pdb.set_trace()
+        '''     
+                debug = False
+                if debug or self.useDrdtApprox:
+                    # EV_XT: K x N0
+                    # Em_drdT_approx: N0 x K
+                    EV_XT = self.EV + np.dot( self.T, self.Evv )
+                    Em_drdT_approx = EV_XT.T * Em_exp_r
+        
+                if debug or not self.useDrdtApprox:
+        '''            
+        # d_EwVT_dT: K x N0
+        d_EwVT_dT = np.dot( self.expVT.T, self.Pw_V )
+        # Em_drdT_exact: N0 x K
+        Em_drdT_exact = d_EwVT_dT.T * Em_exp_r
 
         # Em_drdT: K x N0
         if self.useDrdtApprox:
@@ -299,16 +299,23 @@ class topicvecDir:
         else:
             Em_drdT = Em_drdT_exact.T
 
-        # dLdT, gradT: K x N0
+        # gradT: K x N0
         dLdT = self.sum_pi_v - Em_drdT
         gradT = dLdT * self.delta * grad_scale
         
-        maxTStep = np.max( np.linalg.norm( gradT, axis=1 ) )
-        #if self.it >= 50:
-        #    pdb.set_trace()
+        gradTNorms = np.linalg.norm( gradT, axis=1 )
+        TNorms = np.linalg.norm( self.T, axis=1 )
+        TNorms[ TNorms < 1e-2 ] = 1.0
             
-        if self.max_grad_norm > 0 and maxTStep > self.max_grad_norm:
-            gradT *= self.max_grad_norm / maxTStep
+        gradTScale = np.ones(self.K)
+        gradFractions = gradTNorms / TNorms
+        for k,fraction in enumerate(gradFractions):
+            if self.max_grad_norm_fraction > 0 and fraction > self.max_grad_norm_fraction:
+                gradTScale[k] = self.max_grad_norm_fraction / fraction
+            if self.max_grad_norm > 0 and TNorms[k] > self.max_grad_norm:
+                gradTScale[k] = min( gradTScale[k], self.max_grad_norm / TNorms[k] )
+                    
+        gradT *= gradTScale[:, None]
         T2 = self.T + gradT
 
         maxTStep = np.max( np.linalg.norm( gradT, axis=1 ) )
