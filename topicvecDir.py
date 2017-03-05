@@ -278,28 +278,15 @@ class topicvecDir:
         # Em_exp_r: 1 x K vector
         Em_exp_r = Em * np.exp(self.r)
 
-        '''     
-                debug = False
-                if debug or self.useDrdtApprox:
-                    # EV_XT: K x N0
-                    # Em_drdT_approx: N0 x K
-                    EV_XT = self.EV + np.dot( self.T, self.Evv )
-                    Em_drdT_approx = EV_XT.T * Em_exp_r
-        
-                if debug or not self.useDrdtApprox:
-        '''            
         # d_EwVT_dT: K x N0
         d_EwVT_dT = np.dot( self.expVT.T, self.Pw_V )
         # Em_drdT_exact: N0 x K
         Em_drdT_exact = d_EwVT_dT.T * Em_exp_r
 
         # Em_drdT: K x N0
-        if self.useDrdtApprox:
-            Em_drdT = Em_drdT_approx.T
-        else:
-            Em_drdT = Em_drdT_exact.T
+        Em_drdT = Em_drdT_exact.T
 
-        # gradT: K x N0
+        # dLdT, gradT: K x N0
         dLdT = self.sum_pi_v - Em_drdT
         gradT = dLdT * self.delta * grad_scale
         
@@ -715,7 +702,7 @@ class topicvecDir:
             out0( "Seed: %d" %self.seed )
 
         for k in xrange(0, self.K):
-            self.T[k] = np.random.multivariate_normal( np.zeros(self.N0), np.eye(self.N0) )
+            self.T[k] = np.random.randn(self.N0)
             if self.init_l > 0:
                 self.T[k] = self.init_l * normalizeF(self.T[k])
 
