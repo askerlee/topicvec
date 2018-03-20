@@ -84,7 +84,6 @@ def uniwe_factorize(G, u, N0, MAXITERS=0, tikhonovCoeff=0, testenv=None):
 # N: dimension of factorization
 # tikhonovCoeff: coefficient of Tikhonov regularization on the unweighted least squares
 def nowe_factorize(G, N, tikhonovCoeff=0):
-    timer = Timer( "nowe_factorize()" )
     print "Begin unweighted factorization"
 
     Gsym = sym(G)

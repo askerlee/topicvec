@@ -20,3 +20,6 @@ https://www.dropbox.com/sh/lqbk3iioobegbp8/AACc8Kfr1KZIkKl9bGaIrOjfa?dl=0
 1. Pretrained 180000 embeddings (25000 cores) in 3 archives. For faster loading into Python, 25000-180000-500-BLK-8.0.vec.npy can be used;
 2. Unigram files top1grams-wiki.txt & top1grams-reuters.txt;
 3. RCV1 cleansed corpus ( before downloading, please apply for permission from NIST according to: http://trec.nist.gov/data/reuters/reuters.html ).
+
+If you are in China, you can also download the above files from baidu netdisk without the hassle of "climbing over the wall":
+https://pan.baidu.com/s/1gVmRhK1HA2XwVWZbZHHLZQ#list/path=%2F
